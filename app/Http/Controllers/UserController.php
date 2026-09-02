@@ -24,7 +24,10 @@ class UserController extends Controller
                 'name' => $v->name,
                 'phone' => $v->phone,
                 'balance' => $v->balance(),
-                'loterias' => $v->loterias->pluck('name'),
+                'loterias' => $v->loterias->map(fn ($loteria) => [
+                    'id' => $loteria->id,
+                    'name' => $loteria->name,
+                ])->values(),
             ]);
     }
 

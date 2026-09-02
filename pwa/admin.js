@@ -1,6 +1,9 @@
 const API = '/api';
+let adminDraws = [];
 let numbersRefreshTimer = null;
 let loadingNumbers = false;
+let sellerListRefreshTimer = null;
+let activeSellerList = null;
 
 function getToken() { return localStorage.getItem('admin_token'); }
 
@@ -14,6 +17,10 @@ function isoToday() {
 
 function jsArg(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function textArg(value) {
+  return encodeURIComponent(String(value || ''));
 }
 
 function authHeaders(extra = {}) {
@@ -98,6 +105,7 @@ async function cargarSorteos() {
   if (await handleAuthFailure(res)) return;
   if (!res.ok) return;
   const draws = await res.json();
+  adminDraws = draws;
   const abiertos = draws.filter(d => d.status === 'abierto');
 
   const list = document.getElementById('draws-list');
@@ -202,17 +210,10 @@ async function cargarNumeros() {
 
   const data = await res.json();
   const general = renderNumbersSummary(data.numeros);
-  const sellerBreakdown = data.seller_breakdown || [];
-  const sellerSections = sellerBreakdown.length ? sellerBreakdown.map(renderSellerNumberSection).join('') : `
-    <div class="seller-number-section">
-      <span class="sub">No hay vendedores asignados a esta loteria.</span>
-    </div>
-  `;
 
   grid.innerHTML = `
     ${general}
     ${renderNumberGrid(data.numeros)}
-    ${sellerSections}
   `;
 
   const updated = document.getElementById('numbers-last-updated');
@@ -291,6 +292,13 @@ function startNumbersRealtime() {
   }, 5000);
 }
 
+function findLatestDrawForLoteria(loteriaId) {
+  const draws = adminDraws.filter(d => Number(d.loteria_id) === Number(loteriaId));
+  if (!draws.length) return null;
+
+  return draws.find(d => d.is_open_for_sales) || draws[0];
+}
+
 // ---------- LOTERIAS ----------
 
 async function cargarLoterias() {
@@ -353,10 +361,179 @@ async function cargarVendedoresDetalle() {
   const list = document.getElementById('vendedores-list');
   list.innerHTML = vendedores.length ? vendedores.map(v => `
     <div class="row">
-      <div><div class="name">${v.name}</div><div class="sub">${v.loterias.join(', ') || 'sin loterías asignadas'}</div></div>
-      <span class="sub">${v.phone}</span>
+      <div>
+        <div class="name">${v.name}</div>
+        <div class="sub">${(v.loterias || []).map(l => l.name).join(', ') || 'sin loterías asignadas'}</div>
+      </div>
+      <div class="seller-row-actions">
+        <span class="sub">${v.phone}</span>
+        <button class="inline-btn neutral" onclick="verLoteriasVendedor(${v.id}, '${jsArg(v.name)}')">Ver loterías</button>
+      </div>
     </div>
   `).join('') : '<span class="sub">No hay vendedores todavía.</span>';
+
+  window.adminVendedoresDetalle = vendedores;
+}
+
+function verLoteriasVendedor(userId, name) {
+  const vendedor = (window.adminVendedoresDetalle || []).find(v => Number(v.id) === Number(userId));
+  const panel = document.getElementById('seller-loterias-panel');
+  const list = document.getElementById('seller-loterias-list');
+  document.getElementById('seller-loterias-title').textContent = `LOTERÍAS DE ${name.toUpperCase()}`;
+  panel.classList.add('active');
+
+  if (!vendedor || !vendedor.loterias?.length) {
+    list.innerHTML = '<span class="sub">Este vendedor no tiene loterías asignadas.</span>';
+    return;
+  }
+
+  list.innerHTML = `<div class="assigned-list">${vendedor.loterias.map(loteria => {
+    const draw = findLatestDrawForLoteria(loteria.id);
+    const drawLabel = draw
+      ? `${new Date(draw.draw_datetime).toLocaleDateString('es-CR')} ${new Date(draw.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`
+      : 'sin sorteo creado';
+    const drawId = draw?.id || '';
+
+    return `
+      <div class="assigned-lottery">
+        <div class="assigned-head">
+          <div>
+            <div class="assigned-title">${loteria.name}</div>
+            <div class="assigned-meta">${drawLabel}</div>
+          </div>
+          <span class="pill ${draw?.is_open_for_sales ? 'pending' : 'paid'}">${draw?.is_open_for_sales ? 'vendible' : (draw?.status || 'sin sorteo')}</span>
+        </div>
+        <div class="list-actions">
+          <button class="inline-btn" ${drawId ? '' : 'disabled'} onclick="verListaVendedor(${userId}, ${loteria.id}, ${drawId || 0}, '${jsArg(name)}', '${jsArg(loteria.name)}')">Ver lista</button>
+        </div>
+      </div>
+    `;
+  }).join('')}</div>`;
+}
+
+async function verListaVendedor(userId, loteriaId, drawId, sellerName, loteriaName) {
+  if (!drawId) {
+    alert('Esta lotería todavía no tiene sorteo creado.');
+    return;
+  }
+
+  activeSellerList = { userId, loteriaId, drawId, sellerName, loteriaName };
+  document.getElementById('seller-number-list-panel').classList.add('active');
+  await cargarListaVendedorActiva();
+  startSellerListRealtime();
+}
+
+async function cargarListaVendedorActiva() {
+  if (!activeSellerList) return;
+  const { userId, drawId, sellerName, loteriaName } = activeSellerList;
+  const res = await fetch(`${API}/draws/${drawId}/numbers`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) return;
+
+  const data = await res.json();
+  const sellerData = (data.seller_breakdown || []).find(item => Number(item.seller.id) === Number(userId));
+  const numeros = sellerData?.numeros || [];
+  activeSellerList.data = sellerData || {
+    seller: { id: userId, name: sellerName },
+    sales_count: 0,
+    main_total: 0,
+    addon_total: 0,
+    grand_total: 0,
+    numbers_sold: 0,
+    numeros,
+  };
+
+  document.getElementById('seller-number-list-title').textContent = `${sellerName} · ${loteriaName}`;
+  document.getElementById('seller-number-list-meta').textContent =
+    `${activeSellerList.data.sales_count} tiquete(s) · ${activeSellerList.data.numbers_sold} número(s) · actualizado ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+
+  document.getElementById('seller-number-list-content').innerHTML = `
+    <div class="numbers-summary">
+      <div class="numbers-stat"><span>Normal</span><strong>${money(activeSellerList.data.main_total)}</strong></div>
+      <div class="numbers-stat"><span>Reventado</span><strong>${money(activeSellerList.data.addon_total)}</strong></div>
+      <div class="numbers-stat"><span>Total</span><strong>${money(activeSellerList.data.grand_total)}</strong></div>
+      <div class="numbers-stat"><span>Números</span><strong>${activeSellerList.data.numbers_sold}</strong></div>
+    </div>
+    ${renderNumberGrid(numeros)}
+  `;
+}
+
+function startSellerListRealtime() {
+  if (sellerListRefreshTimer) return;
+  sellerListRefreshTimer = setInterval(() => {
+    const panel = document.getElementById('seller-number-list-panel');
+    if (activeSellerList && panel?.classList.contains('active')) {
+      cargarListaVendedorActiva();
+    }
+  }, 5000);
+}
+
+function cerrarListaVendedor() {
+  activeSellerList = null;
+  document.getElementById('seller-number-list-panel').classList.remove('active');
+  document.getElementById('seller-number-list-content').innerHTML = '<span class="sub">Abre una lotería para ver su lista.</span>';
+}
+
+function listaVendedorTexto() {
+  if (!activeSellerList?.data) return '';
+  const data = activeSellerList.data;
+  const vendidos = (data.numeros || []).filter(n => Number(n.grand_total ?? n.total) > 0);
+  const lines = [
+    `Lista ${activeSellerList.loteriaName}`,
+    `Vendedor: ${activeSellerList.sellerName}`,
+    `Normal: ${money(data.main_total)}`,
+    `Reventado: ${money(data.addon_total)}`,
+    `Total: ${money(data.grand_total)}`,
+    '',
+    'Números vendidos:',
+    ...vendidos.map(n => `${n.numero}: ${money(n.grand_total ?? n.total)}${Number(n.addon_total || 0) > 0 ? ` (Rev ${money(n.addon_total)})` : ''}`),
+  ];
+
+  return lines.join('\n');
+}
+
+function exportarListaVendedor() {
+  if (!activeSellerList?.data) { alert('Primero abre una lista.'); return; }
+  const data = activeSellerList.data;
+  const rows = (data.numeros || [])
+    .filter(n => Number(n.grand_total ?? n.total) > 0)
+    .map(n => `
+      <tr>
+        <td>${n.numero}</td>
+        <td>${Number(n.total || 0)}</td>
+        <td>${Number(n.addon_total || 0)}</td>
+        <td>${Number(n.grand_total ?? n.total)}</td>
+        <td>${Number(n.tickets || 0)}</td>
+      </tr>
+    `).join('');
+  const html = `
+    <html><head><meta charset="UTF-8"></head><body>
+      <h2>Lista ${activeSellerList.loteriaName}</h2>
+      <p>Vendedor: ${activeSellerList.sellerName}</p>
+      <p>Normal: ${money(data.main_total)} | Reventado: ${money(data.addon_total)} | Total: ${money(data.grand_total)}</p>
+      <table border="1">
+        <thead><tr><th>Número</th><th>Normal</th><th>Reventado</th><th>Total</th><th>Tiquetes</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5">Sin ventas</td></tr>'}</tbody>
+      </table>
+    </body></html>
+  `;
+
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `lista-${activeSellerList.sellerName}-${activeSellerList.loteriaName}.xls`.replace(/\s+/g, '-').toLowerCase();
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function compartirListaWhatsapp() {
+  const text = listaVendedorTexto();
+  if (!text) { alert('Primero abre una lista.'); return; }
+
+  window.open(`https://wa.me/?text=${textArg(text)}`, '_blank', 'noopener');
 }
 
 async function crearVendedor() {

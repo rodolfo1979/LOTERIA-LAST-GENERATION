@@ -44,6 +44,7 @@
   .control-table tr:last-child td { border-bottom: none; }
   .inline-btn { border: 1px solid var(--border); border-radius: 8px; background: rgba(255,182,39,.14); color: var(--amber); font-weight: 800; padding: 8px 10px; cursor: pointer; }
   .inline-btn:disabled { opacity: .45; cursor: not-allowed; }
+  .inline-btn.neutral { background: var(--surface-2); color: var(--text); }
   .money-positive { color: var(--mint); font-weight: 700; }
   .money-warning { color: var(--amber); font-weight: 700; }
   .money-danger { color: var(--coral); font-weight: 700; }
@@ -94,6 +95,16 @@
   .seller-number-meta { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
   .seller-number-totals { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
   .seller-number-totals span { background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; font-size: 11px; color: var(--text-dim); }
+  .seller-row-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .assigned-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .assigned-lottery { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .assigned-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+  .assigned-title { font-weight: 800; }
+  .assigned-meta { color: var(--text-dim); font-size: 12px; margin-top: 3px; }
+  .list-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .list-actions .inline-btn { flex: 1; min-width: 96px; }
+  .seller-list-panel { display: none; }
+  .seller-list-panel.active { display: block; }
   @media (max-width: 760px) {
     body { padding: 14px 10px 70px; }
     #app-screen, #login-screen { width: min(100%, calc(100vw - 20px)); }
@@ -104,6 +115,8 @@
     .numbers-summary { grid-template-columns: 1fr; }
     .numbers-toolbar, .seller-number-head { align-items: flex-start; flex-direction: column; }
     .seller-number-totals { justify-content: flex-start; }
+    .assigned-list { grid-template-columns: 1fr; }
+    .seller-row-actions { justify-content: flex-start; }
     .metrics-grid, .filter-grid { grid-template-columns: 1fr 1fr; }
     .history-item { grid-template-columns: 1fr; gap: 4px; }
     .topbar { align-items: flex-start; flex-direction: column; }
@@ -181,7 +194,7 @@
         <option value="">Cargando sorteos...</option>
       </select>
       <div class="numbers-toolbar">
-        <span>Vista por vendedor y por lotería seleccionada.</span>
+        <span>Vista general por lotería seleccionada.</span>
         <span id="numbers-last-updated">Actualizando...</span>
       </div>
       <div id="numbers-grid"><span class="sub">Elegí un sorteo para ver el detalle.</span></div>
@@ -209,6 +222,24 @@
     <div class="card">
       <h3>VENDEDORES</h3>
       <div id="vendedores-list"><span class="sub">Cargando...</span></div>
+    </div>
+    <div class="card seller-list-panel" id="seller-loterias-panel">
+      <h3 id="seller-loterias-title">LOTERÍAS DEL VENDEDOR</h3>
+      <div id="seller-loterias-list"><span class="sub">Selecciona un vendedor.</span></div>
+    </div>
+    <div class="card seller-list-panel" id="seller-number-list-panel">
+      <div class="seller-number-head">
+        <div>
+          <h3 id="seller-number-list-title" style="margin-bottom:4px;">LISTA</h3>
+          <div class="seller-number-meta" id="seller-number-list-meta">Actualizando...</div>
+        </div>
+        <div class="list-actions">
+          <button class="inline-btn neutral" onclick="cerrarListaVendedor()">Cerrar</button>
+          <button class="inline-btn neutral" onclick="exportarListaVendedor()">Exportar</button>
+          <button class="inline-btn" onclick="compartirListaWhatsapp()">WhatsApp</button>
+        </div>
+      </div>
+      <div id="seller-number-list-content"><span class="sub">Abre una lotería para ver su lista.</span></div>
     </div>
     <div class="card">
       <h3>CREAR VENDEDOR</h3>
@@ -327,7 +358,7 @@
 </div>
 
 <script src="ui.js?v=2"></script>
-<script src="admin.js?v=13"></script>
+<script src="admin.js?v=14"></script>
 <script>
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {

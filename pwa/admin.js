@@ -2,6 +2,14 @@ const API = '/api';
 
 function getToken() { return localStorage.getItem('admin_token'); }
 
+function money(value) {
+  return `₡${Number(value || 0).toLocaleString('es-CR')}`;
+}
+
+function isoToday() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function authHeaders(extra = {}) {
   return {
     Accept: 'application/json',
@@ -66,6 +74,9 @@ function mostrarApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   document.getElementById('tenant-name').textContent = localStorage.getItem('tenant_name') || '—';
+  const today = isoToday();
+  document.getElementById('report-from').value = document.getElementById('report-from').value || today;
+  document.getElementById('report-to').value = document.getElementById('report-to').value || today;
   cargarSorteos();
   cargarComisiones();
   cargarVendedores();
@@ -104,6 +115,15 @@ async function cargarSorteos() {
   numbersSelect.innerHTML = draws.map(d =>
     `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
   ).join('') || '<option value="">No hay sorteos creados</option>';
+
+  const reportDrawSelect = document.getElementById('report-draw-select');
+  if (reportDrawSelect) {
+    const selected = reportDrawSelect.value;
+    reportDrawSelect.innerHTML = '<option value="">Todos los sorteos</option>' + draws.map(d =>
+      `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</option>`
+    ).join('');
+    reportDrawSelect.value = selected;
+  }
 
   if (draws.length) cargarNumeros();
 }
@@ -294,25 +314,68 @@ async function crearVendedor() {
 // ---------- COMISIONES ----------
 
 async function cargarComisiones() {
-  const res = await fetch(`${API}/reports/commissions`, { headers: authHeaders() });
+  return cargarControlVendedores();
+}
+
+async function cargarControlVendedores() {
+  const params = new URLSearchParams();
+  const from = document.getElementById('report-from')?.value;
+  const to = document.getElementById('report-to')?.value;
+  const drawId = document.getElementById('report-draw-select')?.value;
+  const sellerId = document.getElementById('report-seller-select')?.value;
+
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (drawId) params.set('draw_id', drawId);
+  if (sellerId) params.set('user_id', sellerId);
+
+  const res = await fetch(`${API}/reports/seller-control?${params.toString()}`, { headers: authHeaders() });
   if (await handleAuthFailure(res)) return;
   if (!res.ok) return;
-  const filas = await res.json();
-  const list = document.getElementById('commissions-list');
+  const data = await res.json();
+  const totals = data.totals || {};
 
-  list.innerHTML = filas.length ? filas.map(f => `
-    <div class="row">
-      <div><div class="name">${f.user.name}</div></div>
-      <div style="text-align:right;">
-        ₡${f.balance}
-        <span class="pill ${f.balance <= 0 ? 'paid' : 'pending'}">${f.balance <= 0 ? 'pagado' : 'pendiente'}</span>
+  document.getElementById('report-sales-total').textContent = money(totals.sales_total);
+  document.getElementById('report-addon-total').textContent = money(totals.sales_addon);
+  document.getElementById('report-commission-total').textContent = money(totals.commission_total);
+  document.getElementById('report-due-total').textContent = money(totals.settlement_due);
+
+  const tbody = document.getElementById('seller-control-rows');
+  tbody.innerHTML = data.rows?.length ? data.rows.map(row => {
+    const dueClass = row.settlement_due > 0 ? 'money-warning' : (row.settlement_due < 0 ? 'money-danger' : 'money-positive');
+    return `
+      <tr>
+        <td><strong>${row.seller.name}</strong><br><span class="sub">${row.seller.phone}</span></td>
+        <td>${row.sales_count}</td>
+        <td>${money(row.sales_main)}</td>
+        <td>${money(row.sales_addon)}</td>
+        <td><strong>${money(row.sales_total)}</strong></td>
+        <td>${money(row.commission_total)}</td>
+        <td>${money(row.prize_total)}</td>
+        <td>${money(row.cash_delivered)}</td>
+        <td class="${dueClass}">${money(row.settlement_due)}</td>
+        <td><span class="pill ${row.status === 'pendiente' ? 'pending' : 'paid'}">${row.status}</span></td>
+      </tr>
+    `;
+  }).join('') : '<tr><td colspan="10">Sin vendedores para mostrar.</td></tr>';
+
+  const recent = document.getElementById('report-recent-list');
+  recent.innerHTML = data.recent?.length ? data.recent.map(item => {
+    const total = item.type === 'venta' ? Number(item.amount) + Number(item.addon_amount || 0) : Number(item.amount);
+    const detail = [
+      item.seller_name || 'Sin vendedor',
+      item.draw_name || '',
+      item.number_played ? `#${item.number_played}` : '',
+    ].filter(Boolean).join(' · ');
+
+    return `
+      <div class="history-item">
+        <span class="kind">${item.type}</span>
+        <span>${detail || 'Movimiento manual'}</span>
+        <strong>${money(total)}</strong>
       </div>
-    </div>
-  `).join('') : '<span class="sub">Sin movimientos esta semana.</span>';
-
-  const pendiente = filas.filter(f => f.balance > 0).reduce((sum, f) => sum + Number(f.balance), 0);
-  document.getElementById('stat-pending').textContent = `₡${pendiente.toLocaleString('es-CR')}`;
-  document.getElementById('stat-vendedores').textContent = filas.length;
+    `;
+  }).join('') : '<span class="sub">Sin movimientos en el rango seleccionado.</span>';
 }
 
 // ---------- CAJA ----------
@@ -341,6 +404,15 @@ async function cargarVendedores() {
   select.innerHTML = vendedores.map(v =>
     `<option value="${v.id}">${v.name} — ${v.balance < 0 ? 'debe' : 'a favor'} ₡${Math.abs(v.balance).toLocaleString('es-CR')}</option>`
   ).join('');
+
+  const reportSellerSelect = document.getElementById('report-seller-select');
+  if (reportSellerSelect) {
+    const selected = reportSellerSelect.value;
+    reportSellerSelect.innerHTML = '<option value="">Todos los vendedores</option>' + vendedores.map(v =>
+      `<option value="${v.id}">${v.name}</option>`
+    ).join('');
+    reportSellerSelect.value = selected;
+  }
 
   cargarVendedoresDetalle();
 }

@@ -29,6 +29,23 @@
   .stat { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
   .stat .n { font-family: 'Archivo Expanded', sans-serif; font-weight: 800; font-size: 22px; }
   .stat .l { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+  .metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .metric { min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 13px; }
+  .metric span { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 5px; }
+  .metric strong { display: block; font-family: 'Archivo Expanded', sans-serif; font-size: 18px; overflow-wrap: anywhere; }
+  .table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+  .control-table { width: 100%; min-width: 900px; border-collapse: collapse; font-size: 13px; }
+  .control-table th, .control-table td { padding: 11px 10px; border-bottom: 1px solid var(--border); text-align: right; white-space: nowrap; }
+  .control-table th:first-child, .control-table td:first-child { text-align: left; }
+  .control-table th { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: rgba(255,255,255,.02); }
+  .control-table tr:last-child td { border-bottom: none; }
+  .money-positive { color: var(--mint); font-weight: 700; }
+  .money-warning { color: var(--amber); font-weight: 700; }
+  .money-danger { color: var(--coral); font-weight: 700; }
+  .history-list { display: grid; gap: 8px; }
+  .history-item { display: grid; grid-template-columns: 120px 1fr auto; gap: 10px; align-items: center; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+  .history-item .kind { text-transform: capitalize; font-weight: 700; }
   label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
   input, select { width: 100%; min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; padding: 11px 12px; margin-bottom: 14px; font-family: inherit; }
   input:focus, select:focus { outline: none; border-color: var(--amber); }
@@ -74,11 +91,14 @@
     .grid-99 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
     .grid-cell { min-height: 48px; padding: 7px 2px; }
     .numbers-summary { grid-template-columns: 1fr; }
+    .metrics-grid, .filter-grid { grid-template-columns: 1fr 1fr; }
+    .history-item { grid-template-columns: 1fr; gap: 4px; }
     .topbar { align-items: flex-start; flex-direction: column; }
   }
   @media (max-width: 420px) {
     .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .grid-99 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .metrics-grid, .filter-grid { grid-template-columns: 1fr; }
     .card { padding: 14px; border-radius: 14px; }
   }
 </style>
@@ -190,12 +210,61 @@
   <!-- COMISIONES -->
   <div class="panel" id="panel-comisiones">
     <div class="card">
-      <div class="stat-grid">
-        <div class="stat"><div class="n" id="stat-pending">₡0</div><div class="l">Pendiente por pagar</div></div>
-        <div class="stat"><div class="n" id="stat-vendedores">0</div><div class="l">Vendedores activos</div></div>
+      <h3>CONTROL DE VENTAS Y COMISIONES</h3>
+      <div class="filter-grid">
+        <div>
+          <label>Desde</label>
+          <input id="report-from" type="date" />
+        </div>
+        <div>
+          <label>Hasta</label>
+          <input id="report-to" type="date" />
+        </div>
+        <div>
+          <label>Sorteo</label>
+          <select id="report-draw-select"><option value="">Todos</option></select>
+        </div>
+        <div>
+          <label>Vendedor</label>
+          <select id="report-seller-select"><option value="">Todos</option></select>
+        </div>
       </div>
-      <h3>ESTA SEMANA</h3>
-      <div id="commissions-list"></div>
+      <button class="btn ghost" onclick="cargarControlVendedores()">Actualizar reporte</button>
+    </div>
+
+    <div class="card">
+      <div class="metrics-grid">
+        <div class="metric"><span>Total vendido</span><strong id="report-sales-total">₡0</strong></div>
+        <div class="metric"><span>Reventado</span><strong id="report-addon-total">₡0</strong></div>
+        <div class="metric"><span>Comisiones</span><strong id="report-commission-total">₡0</strong></div>
+        <div class="metric"><span>Debe entregar</span><strong id="report-due-total">₡0</strong></div>
+      </div>
+      <div class="table-wrap">
+        <table class="control-table">
+          <thead>
+            <tr>
+              <th>Vendedor</th>
+              <th>Ventas</th>
+              <th>Normal</th>
+              <th>Reventado</th>
+              <th>Total</th>
+              <th>Comisión</th>
+              <th>Premios</th>
+              <th>Entregado</th>
+              <th>Debe</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="seller-control-rows">
+            <tr><td colspan="10">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>ÚLTIMOS MOVIMIENTOS</h3>
+      <div id="report-recent-list" class="history-list"><span class="sub">Cargando...</span></div>
     </div>
   </div>
 
@@ -231,7 +300,7 @@
 </div>
 
 <script src="ui.js?v=1"></script>
-<script src="admin.js?v=9"></script>
+<script src="admin.js?v=10"></script>
 <script>
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {

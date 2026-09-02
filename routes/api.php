@@ -95,6 +95,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureTenantScope::class
     // Registrar entrega de efectivo entre admin y vendedor.
     Route::post('/cash-movements', [\App\Http\Controllers\CashMovementController::class, 'store']);
 
+    // Control completo de ventas, premios, comisiones y efectivo por vendedor.
+    Route::get('/reports/seller-control', [\App\Http\Controllers\AdminReportController::class, 'sellerControl']);
+
     // Reglas de cada juego (multiplicadores, comision) -- editables por el admin.
     Route::get('/tenant-rules', [\App\Http\Controllers\TenantRuleController::class, 'index']);
     Route::put('/tenant-rules/{tenantRule}', [\App\Http\Controllers\TenantRuleController::class, 'update']);

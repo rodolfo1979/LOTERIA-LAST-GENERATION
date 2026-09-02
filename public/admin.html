@@ -83,10 +83,17 @@
   .grid-cell .amt { color: var(--text-dim); font-size: 10px; margin-top: 3px; }
   .grid-cell.risk { background: rgba(255,92,108,0.22); }
   .grid-cell.has-sales { background: rgba(255,182,39,0.14); }
-  .numbers-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+  .numbers-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--text-dim); font-size: 12px; margin-top: 8px; }
+  .numbers-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
   .numbers-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
   .numbers-stat span { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
   .numbers-stat strong { font-size: 20px; }
+  .seller-number-section { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 18px; }
+  .seller-number-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+  .seller-number-title { font-weight: 800; font-size: 15px; }
+  .seller-number-meta { color: var(--text-dim); font-size: 12px; margin-top: 2px; }
+  .seller-number-totals { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+  .seller-number-totals span { background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: 999px; padding: 5px 9px; font-size: 11px; color: var(--text-dim); }
   @media (max-width: 760px) {
     body { padding: 14px 10px 70px; }
     #app-screen, #login-screen { width: min(100%, calc(100vw - 20px)); }
@@ -95,6 +102,8 @@
     .grid-99 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
     .grid-cell { min-height: 48px; padding: 7px 2px; }
     .numbers-summary { grid-template-columns: 1fr; }
+    .numbers-toolbar, .seller-number-head { align-items: flex-start; flex-direction: column; }
+    .seller-number-totals { justify-content: flex-start; }
     .metrics-grid, .filter-grid { grid-template-columns: 1fr 1fr; }
     .history-item { grid-template-columns: 1fr; gap: 4px; }
     .topbar { align-items: flex-start; flex-direction: column; }
@@ -171,6 +180,10 @@
       <select id="numbers-draw-select" onchange="cargarNumeros()">
         <option value="">Cargando sorteos...</option>
       </select>
+      <div class="numbers-toolbar">
+        <span>Vista por vendedor y por lotería seleccionada.</span>
+        <span id="numbers-last-updated">Actualizando...</span>
+      </div>
       <div id="numbers-grid"><span class="sub">Elegí un sorteo para ver el detalle.</span></div>
     </div>
   </div>
@@ -314,7 +327,7 @@
 </div>
 
 <script src="ui.js?v=2"></script>
-<script src="admin.js?v=12"></script>
+<script src="admin.js?v=13"></script>
 <script>
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {

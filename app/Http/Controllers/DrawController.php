@@ -100,10 +100,17 @@ class DrawController extends Controller
 
         $vendido = Transaction::where('draw_id', $draw->id)
             ->where('type', 'venta')
-            ->selectRaw('number_played, SUM(amount) as total, COUNT(*) as tickets')
+            ->selectRaw('number_played, SUM(amount) as total, SUM(addon_amount) as addon_total, COUNT(*) as tickets')
             ->groupBy('number_played')
             ->get()
             ->keyBy('number_played');
+
+        $ventasPorVendedor = Transaction::where('draw_id', $draw->id)
+            ->where('type', 'venta')
+            ->selectRaw('user_id, number_played, SUM(amount) as total, SUM(addon_amount) as addon_total, COUNT(*) as tickets')
+            ->groupBy('user_id', 'number_played')
+            ->get()
+            ->groupBy('user_id');
 
         $maxPorNumero = $rule->max_bet_per_number ?? null;
         $digitos = $rule->digits_count ?? 2;
@@ -116,10 +123,13 @@ class DrawController extends Controller
                 $num = str_pad($i, 2, '0', STR_PAD_LEFT);
                 $fila = $vendido->get($num);
                 $total = $fila->total ?? 0;
+                $addonTotal = $fila->addon_total ?? 0;
 
                 $numeros[] = [
                     'numero' => $num,
                     'total' => (float) $total,
+                    'addon_total' => (float) $addonTotal,
+                    'grand_total' => (float) $total + (float) $addonTotal,
                     'tickets' => $fila->tickets ?? 0,
                     'en_riesgo' => $maxPorNumero && $total >= $maxPorNumero,
                 ];
@@ -128,15 +138,68 @@ class DrawController extends Controller
             $numeros = $vendido->map(fn ($fila) => [
                 'numero' => $fila->number_played,
                 'total' => (float) $fila->total,
+                'addon_total' => (float) $fila->addon_total,
+                'grand_total' => (float) $fila->total + (float) $fila->addon_total,
                 'tickets' => $fila->tickets,
                 'en_riesgo' => $maxPorNumero && $fila->total >= $maxPorNumero,
             ])->values();
         }
 
+        $vendedores = $draw->loteria
+            ? $draw->loteria->vendedores()->orderBy('name')->get(['users.id', 'users.name', 'users.phone'])
+            : collect();
+
+        $sellerBreakdown = $vendedores->map(function ($vendedor) use ($ventasPorVendedor, $maxPorNumero, $digitos) {
+            $ventas = $ventasPorVendedor->get($vendedor->id, collect())->keyBy('number_played');
+
+            if ($digitos <= 2) {
+                $numeros = [];
+                for ($i = 0; $i <= 99; $i++) {
+                    $num = str_pad($i, 2, '0', STR_PAD_LEFT);
+                    $fila = $ventas->get($num);
+                    $total = $fila->total ?? 0;
+                    $addonTotal = $fila->addon_total ?? 0;
+
+                    $numeros[] = [
+                        'numero' => $num,
+                        'total' => (float) $total,
+                        'addon_total' => (float) $addonTotal,
+                        'grand_total' => (float) $total + (float) $addonTotal,
+                        'tickets' => $fila->tickets ?? 0,
+                        'en_riesgo' => $maxPorNumero && $total >= $maxPorNumero,
+                    ];
+                }
+            } else {
+                $numeros = $ventas->map(fn ($fila) => [
+                    'numero' => $fila->number_played,
+                    'total' => (float) $fila->total,
+                    'addon_total' => (float) $fila->addon_total,
+                    'grand_total' => (float) $fila->total + (float) $fila->addon_total,
+                    'tickets' => $fila->tickets,
+                    'en_riesgo' => $maxPorNumero && $fila->total >= $maxPorNumero,
+                ])->values();
+            }
+
+            return [
+                'seller' => [
+                    'id' => $vendedor->id,
+                    'name' => $vendedor->name,
+                    'phone' => $vendedor->phone,
+                ],
+                'sales_count' => (int) collect($numeros)->sum('tickets'),
+                'main_total' => (float) collect($numeros)->sum('total'),
+                'addon_total' => (float) collect($numeros)->sum('addon_total'),
+                'grand_total' => (float) collect($numeros)->sum('grand_total'),
+                'numbers_sold' => collect($numeros)->filter(fn ($numero) => $numero['grand_total'] > 0)->count(),
+                'numeros' => $numeros,
+            ];
+        })->values();
+
         return response()->json([
-            'draw' => ['id' => $draw->id, 'name' => $draw->name],
+            'draw' => ['id' => $draw->id, 'name' => $draw->name, 'loteria_id' => $draw->loteria_id],
             'max_por_numero' => $maxPorNumero,
             'numeros' => $numeros,
+            'seller_breakdown' => $sellerBreakdown,
         ]);
     }
 }

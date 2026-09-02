@@ -1,4 +1,6 @@
 const API = '/api';
+let numbersRefreshTimer = null;
+let loadingNumbers = false;
 
 function getToken() { return localStorage.getItem('admin_token'); }
 
@@ -86,6 +88,7 @@ function mostrarApp() {
   cargarVendedores();
   cargarReglas();
   cargarLoterias();
+  startNumbersRealtime();
 }
 
 // ---------- SORTEOS ----------
@@ -179,6 +182,7 @@ async function cerrarSorteo() {
 // ---------- NUMEROS (cuadricula de riesgo) ----------
 
 async function cargarNumeros() {
+  if (loadingNumbers) return;
   const drawId = document.getElementById('numbers-draw-select').value;
   const grid = document.getElementById('numbers-grid');
   if (!drawId) {
@@ -186,39 +190,105 @@ async function cargarNumeros() {
     return;
   }
 
-  const res = await fetch(`${API}/draws/${drawId}/numbers`, { headers: authHeaders() });
+  loadingNumbers = true;
+  let res;
+  try {
+    res = await fetch(`${API}/draws/${drawId}/numbers`, { headers: authHeaders() });
+  } finally {
+    loadingNumbers = false;
+  }
   if (await handleAuthFailure(res)) return;
   if (!res.ok) return;
 
   const data = await res.json();
-  const vendidos = data.numeros.filter(n => Number(n.total) > 0);
-  const totalVendido = vendidos.reduce((sum, n) => sum + Number(n.total), 0);
-  const numerosRiesgo = data.numeros.filter(n => n.en_riesgo).length;
-  const summary = `
-    <div class="numbers-summary">
-      <div class="numbers-stat"><span>Numeros vendidos</span><strong>${vendidos.length}</strong></div>
-      <div class="numbers-stat"><span>Total vendido</span><strong>₡${totalVendido.toLocaleString('es-CR')}</strong></div>
-      <div class="numbers-stat"><span>En riesgo</span><strong>${numerosRiesgo}</strong></div>
+  const general = renderNumbersSummary(data.numeros);
+  const sellerBreakdown = data.seller_breakdown || [];
+  const sellerSections = sellerBreakdown.length ? sellerBreakdown.map(renderSellerNumberSection).join('') : `
+    <div class="seller-number-section">
+      <span class="sub">No hay vendedores asignados a esta loteria.</span>
     </div>
   `;
 
-  if (Array.isArray(data.numeros) && data.numeros.length > 0 && data.numeros[0].numero?.length === 2) {
-    // Cuadricula completa 00-99.
-    grid.innerHTML = `${summary}<div class="grid-99">${data.numeros.map(n => `
+  grid.innerHTML = `
+    ${general}
+    ${renderNumberGrid(data.numeros)}
+    ${sellerSections}
+  `;
+
+  const updated = document.getElementById('numbers-last-updated');
+  if (updated) {
+    updated.textContent = `Actualizado ${new Date().toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+  }
+}
+
+function renderNumbersSummary(numeros) {
+  const vendidos = numeros.filter(n => Number(n.grand_total ?? n.total) > 0);
+  const totalVendido = vendidos.reduce((sum, n) => sum + Number(n.grand_total ?? n.total), 0);
+  const totalReventado = vendidos.reduce((sum, n) => sum + Number(n.addon_total || 0), 0);
+  const numerosRiesgo = numeros.filter(n => n.en_riesgo).length;
+
+  return `
+    <div class="numbers-summary">
+      <div class="numbers-stat"><span>Numeros vendidos</span><strong>${vendidos.length}</strong></div>
+      <div class="numbers-stat"><span>Total vendido</span><strong>${money(totalVendido)}</strong></div>
+      <div class="numbers-stat"><span>Reventado</span><strong>${money(totalReventado)}</strong></div>
+      <div class="numbers-stat"><span>En riesgo</span><strong>${numerosRiesgo}</strong></div>
+    </div>
+  `;
+}
+
+function renderNumberGrid(numeros) {
+  if (Array.isArray(numeros) && numeros.length > 0 && numeros[0].numero?.length === 2) {
+    return `<div class="grid-99">${numeros.map(n => {
+      const grandTotal = Number(n.grand_total ?? n.total);
+      const addonTotal = Number(n.addon_total || 0);
+      const amountText = grandTotal > 0
+        ? `${money(grandTotal)}${addonTotal > 0 ? `<br><span>Rev ${money(addonTotal)}</span>` : ''}`
+        : '—';
+      return `
       <div class="grid-cell ${n.en_riesgo ? 'risk' : (n.total > 0 ? 'has-sales' : '')}">
         <div class="num">${n.numero}</div>
-        <div class="amt">${n.total > 0 ? '₡' + n.total.toLocaleString('es-CR') : '—'}</div>
+        <div class="amt">${amountText}</div>
       </div>
-    `).join('')}</div>`;
-  } else {
-    // Lista simple para juegos de 3+ digitos.
-    grid.innerHTML = data.numeros.length ? summary + data.numeros.map(n => `
+    `;
+    }).join('')}</div>`;
+  }
+
+  return numeros.length ? numeros.map(n => `
       <div class="row">
         <span class="name">${n.numero}</span>
-        <span>₡${n.total.toLocaleString('es-CR')} <span class="sub">(${n.tickets} tiquetes)</span> ${n.en_riesgo ? '<span class="pill risk">riesgo</span>' : ''}</span>
+        <span>${money(n.grand_total ?? n.total)} <span class="sub">(${n.tickets} tiquetes)</span> ${n.en_riesgo ? '<span class="pill risk">riesgo</span>' : ''}</span>
       </div>
     `).join('') : '<span class="sub">Sin ventas todavía.</span>';
-  }
+}
+
+function renderSellerNumberSection(item) {
+  return `
+    <div class="seller-number-section">
+      <div class="seller-number-head">
+        <div>
+          <div class="seller-number-title">${item.seller.name}</div>
+          <div class="seller-number-meta">${item.seller.phone} · ${item.sales_count} tiquete(s) · ${item.numbers_sold} numero(s)</div>
+        </div>
+        <div class="seller-number-totals">
+          <span>Normal ${money(item.main_total)}</span>
+          <span>Reventado ${money(item.addon_total)}</span>
+          <span>Total ${money(item.grand_total)}</span>
+        </div>
+      </div>
+      ${renderNumberGrid(item.numeros || [])}
+    </div>
+  `;
+}
+
+function startNumbersRealtime() {
+  if (numbersRefreshTimer) return;
+  numbersRefreshTimer = setInterval(() => {
+    const numbersPanel = document.getElementById('panel-numeros');
+    if (numbersPanel?.classList.contains('active')) {
+      cargarNumeros();
+    }
+  }, 5000);
 }
 
 // ---------- LOTERIAS ----------

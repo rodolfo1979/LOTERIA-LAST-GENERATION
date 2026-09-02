@@ -97,6 +97,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureTenantScope::class
 
     // Control completo de ventas, premios, comisiones y efectivo por vendedor.
     Route::get('/reports/seller-control', [\App\Http\Controllers\AdminReportController::class, 'sellerControl']);
+    Route::get('/reports/seller-control/export/excel', [\App\Http\Controllers\AdminReportController::class, 'exportExcel']);
+    Route::get('/reports/seller-control/export/pdf', [\App\Http\Controllers\AdminReportController::class, 'exportPdf']);
 
     // Reglas de cada juego (multiplicadores, comision) -- editables por el admin.
     Route::get('/tenant-rules', [\App\Http\Controllers\TenantRuleController::class, 'index']);

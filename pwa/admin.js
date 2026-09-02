@@ -318,16 +318,7 @@ async function cargarComisiones() {
 }
 
 async function cargarControlVendedores() {
-  const params = new URLSearchParams();
-  const from = document.getElementById('report-from')?.value;
-  const to = document.getElementById('report-to')?.value;
-  const drawId = document.getElementById('report-draw-select')?.value;
-  const sellerId = document.getElementById('report-seller-select')?.value;
-
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  if (drawId) params.set('draw_id', drawId);
-  if (sellerId) params.set('user_id', sellerId);
+  const params = reportParams();
 
   const res = await fetch(`${API}/reports/seller-control?${params.toString()}`, { headers: authHeaders() });
   if (await handleAuthFailure(res)) return;
@@ -376,6 +367,42 @@ async function cargarControlVendedores() {
       </div>
     `;
   }).join('') : '<span class="sub">Sin movimientos en el rango seleccionado.</span>';
+}
+
+function reportParams() {
+  const params = new URLSearchParams();
+  const from = document.getElementById('report-from')?.value;
+  const to = document.getElementById('report-to')?.value;
+  const drawId = document.getElementById('report-draw-select')?.value;
+  const sellerId = document.getElementById('report-seller-select')?.value;
+
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  if (drawId) params.set('draw_id', drawId);
+  if (sellerId) params.set('user_id', sellerId);
+
+  return params;
+}
+
+async function exportarReporte(type) {
+  const params = reportParams();
+  const endpoint = type === 'pdf' ? 'pdf' : 'excel';
+  const extension = type === 'pdf' ? 'pdf' : 'xls';
+  const res = await fetch(`${API}/reports/seller-control/export/${endpoint}?${params.toString()}`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) { alert('No se pudo exportar el reporte'); return; }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const from = document.getElementById('report-from')?.value || 'inicio';
+  const to = document.getElementById('report-to')?.value || 'fin';
+  link.href = url;
+  link.download = `control-vendedores-${from}-${to}.${extension}`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ---------- CAJA ----------

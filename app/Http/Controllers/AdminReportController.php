@@ -6,10 +6,41 @@ use App\Models\Draw;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 class AdminReportController extends Controller
 {
     public function sellerControl(Request $request)
+    {
+        return response()->json($this->buildSellerControlReport($request));
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $report = $this->buildSellerControlReport($request);
+        $filename = 'control-vendedores-'.$report['filters']['from'].'-'.$report['filters']['to'].'.xls';
+        $html = $this->buildExcelHtml($report);
+
+        return response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $report = $this->buildSellerControlReport($request);
+        $filename = 'control-vendedores-'.$report['filters']['from'].'-'.$report['filters']['to'].'.pdf';
+        $pdf = $this->buildPdf($report);
+
+        return response($pdf, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+        ]);
+    }
+
+    protected function buildSellerControlReport(Request $request): array
     {
         if (! in_array($request->user()->role, ['admin', 'dueno'])) {
             abort(403);
@@ -23,8 +54,8 @@ class AdminReportController extends Controller
         ]);
 
         $tenantId = $request->user()->tenant_id;
-        $from = isset($data['from']) ? now()->parse($data['from'])->startOfDay() : today()->startOfDay();
-        $to = isset($data['to']) ? now()->parse($data['to'])->endOfDay() : today()->endOfDay();
+        $from = isset($data['from']) ? Carbon::parse($data['from'])->startOfDay() : today()->startOfDay();
+        $to = isset($data['to']) ? Carbon::parse($data['to'])->endOfDay() : today()->endOfDay();
 
         $draw = null;
         if (! empty($data['draw_id'])) {
@@ -107,7 +138,7 @@ class AdminReportController extends Controller
             'metadata' => $item->metadata,
         ]);
 
-        return response()->json([
+        return [
             'filters' => [
                 'from' => $from->toDateString(),
                 'to' => $to->toDateString(),
@@ -127,6 +158,132 @@ class AdminReportController extends Controller
             ],
             'rows' => $rows,
             'recent' => $recent,
-        ]);
+        ];
+    }
+
+    protected function buildExcelHtml(array $report): string
+    {
+        $money = fn ($value) => 'CRC '.number_format((float) $value, 2, '.', ',');
+        $html = '<html><head><meta charset="UTF-8"></head><body>';
+        $html .= '<h2>Control de ventas y comisiones</h2>';
+        $html .= '<p>Desde: '.$this->e($report['filters']['from']).' | Hasta: '.$this->e($report['filters']['to']).'</p>';
+
+        $html .= '<table border="1"><thead><tr>';
+        foreach (['Vendedor', 'Telefono', 'Ventas', 'Normal', 'Reventado', 'Total', 'Comision', 'Premios', 'Entregado', 'Admin entrega', 'Debe entregar', 'Estado'] as $heading) {
+            $html .= '<th>'.$heading.'</th>';
+        }
+        $html .= '</tr></thead><tbody>';
+
+        foreach ($report['rows'] as $row) {
+            $html .= '<tr>';
+            $html .= '<td>'.$this->e($row['seller']['name']).'</td>';
+            $html .= '<td>'.$this->e($row['seller']['phone']).'</td>';
+            $html .= '<td>'.$row['sales_count'].'</td>';
+            $html .= '<td>'.$money($row['sales_main']).'</td>';
+            $html .= '<td>'.$money($row['sales_addon']).'</td>';
+            $html .= '<td>'.$money($row['sales_total']).'</td>';
+            $html .= '<td>'.$money($row['commission_total']).'</td>';
+            $html .= '<td>'.$money($row['prize_total']).'</td>';
+            $html .= '<td>'.$money($row['cash_delivered']).'</td>';
+            $html .= '<td>'.$money($row['cash_given']).'</td>';
+            $html .= '<td>'.$money($row['settlement_due']).'</td>';
+            $html .= '<td>'.$this->e($row['status']).'</td>';
+            $html .= '</tr>';
+        }
+
+        $html .= '</tbody></table><br><h3>Ultimos movimientos</h3>';
+        $html .= '<table border="1"><thead><tr><th>Tipo</th><th>Vendedor</th><th>Sorteo</th><th>Numero</th><th>Monto</th><th>Reventado</th><th>Fecha</th></tr></thead><tbody>';
+
+        foreach ($report['recent'] as $item) {
+            $html .= '<tr>';
+            $html .= '<td>'.$this->e($item['type']).'</td>';
+            $html .= '<td>'.$this->e($item['seller_name'] ?? '').'</td>';
+            $html .= '<td>'.$this->e($item['draw_name'] ?? '').'</td>';
+            $html .= '<td>'.$this->e($item['number_played'] ?? '').'</td>';
+            $html .= '<td>'.$money($item['amount']).'</td>';
+            $html .= '<td>'.$money($item['addon_amount']).'</td>';
+            $html .= '<td>'.$this->e((string) $item['created_at']).'</td>';
+            $html .= '</tr>';
+        }
+
+        return $html.'</tbody></table></body></html>';
+    }
+
+    protected function buildPdf(array $report): string
+    {
+        $lines = [
+            'Control de ventas y comisiones',
+            'Desde '.$report['filters']['from'].' hasta '.$report['filters']['to'],
+            'Total vendido: CRC '.number_format($report['totals']['sales_total'], 2, '.', ','),
+            'Reventado: CRC '.number_format($report['totals']['sales_addon'], 2, '.', ','),
+            'Comisiones: CRC '.number_format($report['totals']['commission_total'], 2, '.', ','),
+            'Debe entregar: CRC '.number_format($report['totals']['settlement_due'], 2, '.', ','),
+            '',
+            'Vendedores',
+        ];
+
+        foreach ($report['rows'] as $row) {
+            $lines[] = Str::limit($row['seller']['name'], 22, '').' | ventas CRC '.number_format($row['sales_total'], 2, '.', ',').' | comision CRC '.number_format($row['commission_total'], 2, '.', ',').' | debe CRC '.number_format($row['settlement_due'], 2, '.', ',').' | '.$row['status'];
+        }
+
+        $lines[] = '';
+        $lines[] = 'Ultimos movimientos';
+        foreach ($report['recent'] as $item) {
+            $amount = $item['type'] === 'venta'
+                ? (float) $item['amount'] + (float) $item['addon_amount']
+                : (float) $item['amount'];
+            $lines[] = Str::limit(($item['type'].' '.$item['seller_name'].' '.$item['draw_name'].' '.$item['number_played']), 55, '').' CRC '.number_format($amount, 2, '.', ',');
+        }
+
+        return $this->simplePdf($lines);
+    }
+
+    protected function simplePdf(array $lines): string
+    {
+        $content = "BT\n/F1 12 Tf\n50 790 Td\n";
+        foreach (array_slice($lines, 0, 42) as $index => $line) {
+            if ($index > 0) {
+                $content .= "0 -17 Td\n";
+            }
+            $content .= '('.$this->pdfText($line).") Tj\n";
+        }
+        $content .= "ET";
+
+        $objects = [
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n",
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n",
+            "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n",
+            "5 0 obj\n<< /Length ".strlen($content)." >>\nstream\n".$content."\nendstream\nendobj\n",
+        ];
+
+        $pdf = "%PDF-1.4\n";
+        $offsets = [0];
+        foreach ($objects as $object) {
+            $offsets[] = strlen($pdf);
+            $pdf .= $object;
+        }
+
+        $xref = strlen($pdf);
+        $pdf .= "xref\n0 ".(count($objects) + 1)."\n";
+        $pdf .= "0000000000 65535 f \n";
+        for ($i = 1; $i <= count($objects); $i++) {
+            $pdf .= sprintf("%010d 00000 n \n", $offsets[$i]);
+        }
+
+        return $pdf."trailer\n<< /Size ".(count($objects) + 1)." /Root 1 0 R >>\nstartxref\n".$xref."\n%%EOF";
+    }
+
+    protected function pdfText(string $text): string
+    {
+        $converted = iconv('UTF-8', 'Windows-1252//TRANSLIT', $text);
+        $text = $converted === false ? preg_replace('/[^\x20-\x7E]/', '', $text) : $converted;
+
+        return str_replace(['\\', '(', ')'], ['\\\\', '\\(', '\\)'], $text);
+    }
+
+    protected function e(?string $text): string
+    {
+        return htmlspecialchars($text ?? '', ENT_QUOTES, 'UTF-8');
     }
 }

@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Draw;
+use App\Models\SettlementClosure;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class AdminReportController extends Controller
@@ -38,6 +40,78 @@ class AdminReportController extends Controller
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="'.$filename.'"',
         ]);
+    }
+
+    public function closeSeller(Request $request)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno'])) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'from' => ['nullable', 'date'],
+            'to' => ['nullable', 'date'],
+            'draw_id' => ['nullable', 'integer', 'exists:draws,id'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $reportRequest = $request->duplicate(array_merge($request->query(), [
+            'user_id' => $data['user_id'],
+            'from' => $data['from'] ?? today()->toDateString(),
+            'to' => $data['to'] ?? today()->toDateString(),
+            'draw_id' => $data['draw_id'] ?? null,
+        ]));
+
+        $reportRequest->setUserResolver(fn () => $request->user());
+        $report = $this->buildSellerControlReport($reportRequest);
+        $row = $report['rows'][0] ?? null;
+
+        if (! $row) {
+            return response()->json(['message' => 'No se encontro el vendedor para cerrar.'], 422);
+        }
+
+        $closure = DB::transaction(function () use ($request, $data, $report, $row) {
+            $closure = SettlementClosure::create([
+                'tenant_id' => $request->user()->tenant_id,
+                'user_id' => $row['seller']['id'],
+                'closed_by' => $request->user()->id,
+                'draw_id' => $data['draw_id'] ?? null,
+                'period_from' => $report['filters']['from'],
+                'period_to' => $report['filters']['to'],
+                'sales_total' => $row['sales_total'],
+                'commission_total' => $row['commission_total'],
+                'prize_total' => $row['prize_total'],
+                'cash_delivered' => $row['cash_delivered'],
+                'cash_given' => $row['cash_given'],
+                'settlement_amount' => $row['settlement_due'],
+                'note' => $data['note'] ?? null,
+                'snapshot' => $row,
+            ]);
+
+            if ((float) $row['settlement_due'] !== 0.0) {
+                Transaction::create([
+                    'tenant_id' => $request->user()->tenant_id,
+                    'user_id' => $row['seller']['id'],
+                    'draw_id' => $data['draw_id'] ?? null,
+                    'type' => 'ajuste',
+                    'amount' => -1 * (float) $row['settlement_due'],
+                    'metadata' => [
+                        'direction' => $row['settlement_due'] > 0 ? 'vendedor_a_admin' : 'admin_a_vendedor',
+                        'note' => $data['note'] ?? 'Cierre de caja',
+                        'settlement_closure_id' => $closure->id,
+                        'registrado_por' => $request->user()->id,
+                    ],
+                ]);
+            }
+
+            return $closure;
+        });
+
+        return response()->json([
+            'message' => 'Cierre de caja registrado.',
+            'closure' => $closure,
+        ], 201);
     }
 
     protected function buildSellerControlReport(Request $request): array
@@ -138,6 +212,25 @@ class AdminReportController extends Controller
             'metadata' => $item->metadata,
         ]);
 
+        $closures = SettlementClosure::where('tenant_id', $tenantId)
+            ->whereBetween('created_at', [$from, $to])
+            ->when($draw, fn ($query) => $query->where('draw_id', $draw->id))
+            ->when($seller, fn ($query) => $query->where('user_id', $seller->id))
+            ->with(['seller:id,name,phone', 'closer:id,name'])
+            ->latest()
+            ->limit(15)
+            ->get()
+            ->map(fn (SettlementClosure $closure) => [
+                'id' => $closure->id,
+                'seller_name' => $closure->seller?->name,
+                'closed_by_name' => $closure->closer?->name,
+                'period_from' => $closure->period_from?->toDateString(),
+                'period_to' => $closure->period_to?->toDateString(),
+                'settlement_amount' => (float) $closure->settlement_amount,
+                'created_at' => $closure->created_at,
+                'note' => $closure->note,
+            ]);
+
         return [
             'filters' => [
                 'from' => $from->toDateString(),
@@ -158,6 +251,7 @@ class AdminReportController extends Controller
             ],
             'rows' => $rows,
             'recent' => $recent,
+            'closures' => $closures,
         ];
     }
 

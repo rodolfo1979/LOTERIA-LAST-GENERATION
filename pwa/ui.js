@@ -56,6 +56,10 @@
         font-weight: 800;
         cursor: pointer;
       }
+      .app-dialog-button.secondary {
+        background: #eef2f7;
+        color: #344054;
+      }
       .app-dialog-button:focus {
         outline: 3px solid rgba(217, 164, 65, .35);
         outline-offset: 2px;
@@ -78,6 +82,7 @@
         </div>
         <div class="app-dialog-body" id="app-dialog-message"></div>
         <div class="app-dialog-actions">
+          <button class="app-dialog-button secondary" id="app-dialog-cancel" type="button" style="display:none;">Cancelar</button>
           <button class="app-dialog-button" id="app-dialog-ok" type="button">Aceptar</button>
         </div>
       </div>
@@ -86,19 +91,31 @@
     document.head.appendChild(style);
     document.body.appendChild(dialog);
 
-    const close = () => {
+    let resolver = null;
+
+    const close = (value = true) => {
       dialog.classList.remove('open');
       document.removeEventListener('keydown', onKeyDown);
+      if (resolver) {
+        resolver(value);
+        resolver = null;
+      }
     };
 
     function onKeyDown(event) {
-      if (event.key === 'Escape' || event.key === 'Enter') close();
+      if (event.key === 'Escape') close(false);
+      if (event.key === 'Enter') close(true);
     }
 
-    dialog.querySelector('#app-dialog-ok').addEventListener('click', close);
+    dialog.querySelector('#app-dialog-ok').addEventListener('click', () => close(true));
+    dialog.querySelector('#app-dialog-cancel').addEventListener('click', () => close(false));
     dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) close();
+      if (event.target === dialog) close(false);
     });
+
+    dialog.resolveWith = (callback) => {
+      resolver = callback;
+    };
   }
 
   window.showAppMessage = function (message, title = 'Mensaje del sistema') {
@@ -106,8 +123,23 @@
     const dialog = document.getElementById('app-message-dialog');
     document.getElementById('app-dialog-title').textContent = title;
     document.getElementById('app-dialog-message').textContent = String(message || '');
+    document.getElementById('app-dialog-cancel').style.display = 'none';
+    document.getElementById('app-dialog-ok').textContent = 'Aceptar';
     dialog.classList.add('open');
     document.getElementById('app-dialog-ok').focus();
+  };
+
+  window.showAppConfirm = function (message, title = 'Confirmar accion') {
+    ensureDialog();
+    const dialog = document.getElementById('app-message-dialog');
+    document.getElementById('app-dialog-title').textContent = title;
+    document.getElementById('app-dialog-message').textContent = String(message || '');
+    document.getElementById('app-dialog-cancel').style.display = 'inline-flex';
+    document.getElementById('app-dialog-ok').textContent = 'Confirmar';
+    dialog.classList.add('open');
+    document.getElementById('app-dialog-ok').focus();
+
+    return new Promise(resolve => dialog.resolveWith(resolve));
   };
 
   window.alert = function (message) {

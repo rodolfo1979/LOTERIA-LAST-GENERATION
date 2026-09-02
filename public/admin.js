@@ -10,6 +10,10 @@ function isoToday() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function jsArg(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 function authHeaders(extra = {}) {
   return {
     Accept: 'application/json',
@@ -334,6 +338,7 @@ async function cargarControlVendedores() {
   const tbody = document.getElementById('seller-control-rows');
   tbody.innerHTML = data.rows?.length ? data.rows.map(row => {
     const dueClass = row.settlement_due > 0 ? 'money-warning' : (row.settlement_due < 0 ? 'money-danger' : 'money-positive');
+    const sellerName = jsArg(row.seller.name);
     return `
       <tr>
         <td><strong>${row.seller.name}</strong><br><span class="sub">${row.seller.phone}</span></td>
@@ -346,9 +351,10 @@ async function cargarControlVendedores() {
         <td>${money(row.cash_delivered)}</td>
         <td class="${dueClass}">${money(row.settlement_due)}</td>
         <td><span class="pill ${row.status === 'pendiente' ? 'pending' : 'paid'}">${row.status}</span></td>
+        <td><button class="inline-btn" onclick="cerrarCajaVendedor(${row.seller.id}, '${sellerName}', ${Number(row.settlement_due || 0)})">Cerrar</button></td>
       </tr>
     `;
-  }).join('') : '<tr><td colspan="10">Sin vendedores para mostrar.</td></tr>';
+  }).join('') : '<tr><td colspan="11">Sin vendedores para mostrar.</td></tr>';
 
   const recent = document.getElementById('report-recent-list');
   recent.innerHTML = data.recent?.length ? data.recent.map(item => {
@@ -367,6 +373,15 @@ async function cargarControlVendedores() {
       </div>
     `;
   }).join('') : '<span class="sub">Sin movimientos en el rango seleccionado.</span>';
+
+  const closures = document.getElementById('report-closures-list');
+  closures.innerHTML = data.closures?.length ? data.closures.map(item => `
+    <div class="history-item">
+      <span class="kind">Cierre #${item.id}</span>
+      <span>${item.seller_name || 'Vendedor'} · ${item.period_from} a ${item.period_to} · por ${item.closed_by_name || 'admin'}</span>
+      <strong>${money(item.settlement_amount)}</strong>
+    </div>
+  `).join('') : '<span class="sub">Todavia no hay cierres en este rango.</span>';
 }
 
 function reportParams() {
@@ -403,6 +418,41 @@ async function exportarReporte(type) {
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
+}
+
+async function cerrarCajaVendedor(userId, name, amount) {
+  const params = reportParams();
+  const label = amount > 0
+    ? `${name} debe entregar ${money(amount)}.`
+    : amount < 0
+      ? `${name} queda a favor por ${money(Math.abs(amount))}.`
+      : `${name} esta cuadrado en este rango.`;
+
+  const ok = await window.showAppConfirm(
+    `${label}\n\nSe guardara un cierre formal y un ajuste automatico para dejar el periodo cuadrado.`,
+    'Cerrar caja del vendedor'
+  );
+  if (!ok) return;
+
+  const body = {
+    user_id: userId,
+    from: params.get('from'),
+    to: params.get('to'),
+    draw_id: params.get('draw_id') || null,
+    note: 'Cierre desde panel admin',
+  };
+
+  const res = await fetch(`${API}/reports/seller-control/close`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) { const err = await readError(res); alert(err.message || 'No se pudo cerrar la caja'); return; }
+
+  alert('Cierre de caja registrado.');
+  cargarControlVendedores();
+  cargarVendedores();
 }
 
 // ---------- CAJA ----------

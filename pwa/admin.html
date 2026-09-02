@@ -42,6 +42,8 @@
   .control-table th:first-child, .control-table td:first-child { text-align: left; }
   .control-table th { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; background: rgba(255,255,255,.02); }
   .control-table tr:last-child td { border-bottom: none; }
+  .inline-btn { border: 1px solid var(--border); border-radius: 8px; background: rgba(255,182,39,.14); color: var(--amber); font-weight: 800; padding: 8px 10px; cursor: pointer; }
+  .inline-btn:disabled { opacity: .45; cursor: not-allowed; }
   .money-positive { color: var(--mint); font-weight: 700; }
   .money-warning { color: var(--amber); font-weight: 700; }
   .money-danger { color: var(--coral); font-weight: 700; }
@@ -259,10 +261,11 @@
               <th>Entregado</th>
               <th>Debe</th>
               <th>Estado</th>
+              <th>Cierre</th>
             </tr>
           </thead>
           <tbody id="seller-control-rows">
-            <tr><td colspan="10">Cargando...</td></tr>
+            <tr><td colspan="11">Cargando...</td></tr>
           </tbody>
         </table>
       </div>
@@ -271,6 +274,11 @@
     <div class="card">
       <h3>ÚLTIMOS MOVIMIENTOS</h3>
       <div id="report-recent-list" class="history-list"><span class="sub">Cargando...</span></div>
+    </div>
+
+    <div class="card">
+      <h3>CIERRES RECIENTES</h3>
+      <div id="report-closures-list" class="history-list"><span class="sub">Cargando...</span></div>
     </div>
   </div>
 
@@ -305,8 +313,8 @@
   </div>
 </div>
 
-<script src="ui.js?v=1"></script>
-<script src="admin.js?v=11"></script>
+<script src="ui.js?v=2"></script>
+<script src="admin.js?v=12"></script>
 <script>
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {

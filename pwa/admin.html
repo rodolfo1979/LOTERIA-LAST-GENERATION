@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@700;800&family=Inter:wght@400;500;600&display=swap');
+
+  :root {
+    --bg: #0A0A0F; --surface: #14141C; --surface-2: #1D1D28; --border: #2A2A38;
+    --amber: #FFB627; --mint: #00E5A0; --coral: #FF5C6C; --text: #F5F5F7; --text-dim: #8B8B9A;
+  }
+  html { width: 100%; overflow-x: hidden; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 100%; min-width: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; padding: 20px 16px 80px; overflow-x: hidden; }
+  #app-screen { width: min(1180px, calc(100vw - 32px)); margin: 0 auto; }
+  #login-screen { width: min(420px, calc(100vw - 32px)); margin: 40px auto 0; }
+  .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; gap: 16px; }
+  .topbar .brand { font-family: 'Archivo Expanded', sans-serif; font-weight: 800; font-size: 18px; }
+  .topbar .tenant { font-size: 13px; color: var(--text-dim); }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; padding-bottom: 2px; }
+  .tab { flex-shrink: 0; padding: 9px 14px; border-radius: 100px; font-size: 13px; font-weight: 600; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
+  .tab.active { background: linear-gradient(135deg, var(--amber), #FF8A00); color: #14141C; border: none; }
+  .panel { display: none; } .panel.active { display: block; }
+  .card { width: 100%; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 14px; overflow: hidden; }
+  .card h3 { font-size: 13px; color: var(--text-dim); font-weight: 600; margin-bottom: 14px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--surface-2); border-radius: 12px; padding: 12px 14px; }
+  .stat .n { font-family: 'Archivo Expanded', sans-serif; font-weight: 800; font-size: 22px; }
+  .stat .l { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+  input, select { width: 100%; min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; padding: 11px 12px; margin-bottom: 14px; font-family: inherit; }
+  input:focus, select:focus { outline: none; border-color: var(--amber); }
+  .btn { width: 100%; padding: 13px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--amber), #FF8A00); color: #14141C; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .btn.small { width: auto; padding: 8px 14px; font-size: 12px; margin-top: 0; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .row:last-child { border-bottom: none; }
+  .row .name { font-weight: 500; }
+  .row .sub { font-size: 12px; color: var(--text-dim); }
+  .pill { font-size: 11px; padding: 3px 9px; border-radius: 100px; font-weight: 600; }
+  .pill.pending { background: rgba(255,182,39,0.14); color: var(--amber); }
+  .pill.paid { background: rgba(0,229,160,0.14); color: var(--mint); }
+  .pill.risk { background: rgba(255,92,108,0.16); color: var(--coral); }
+  .draw-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .draw-item:last-child { border-bottom: none; }
+  .draw-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-width: 0; }
+  .draw-name { font-weight: 600; font-size: 14px; }
+  .draw-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .rule-block { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+  .rule-block:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+  .rule-title { font-family: 'Archivo Expanded', sans-serif; font-weight: 800; font-size: 15px; text-transform: capitalize; margin-bottom: 12px; }
+  .rule-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rule-fields.three { grid-template-columns: 1fr 1fr 1fr; }
+  .checklist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+  .checklist label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); font-weight: 400; margin-bottom: 0; }
+  .checklist input[type=checkbox] { width: auto; margin: 0; }
+  .grid-99 { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 6px; margin-top: 12px; width: 100%; }
+  .grid-cell { background: var(--surface-2); border-radius: 8px; padding: 8px 4px; text-align: center; font-size: 10px; min-height: 54px; }
+  .grid-cell .num { font-weight: 800; font-size: 13px; }
+  .grid-cell .amt { color: var(--text-dim); font-size: 10px; margin-top: 3px; }
+  .grid-cell.risk { background: rgba(255,92,108,0.22); }
+  .grid-cell.has-sales { background: rgba(255,182,39,0.14); }
+  .numbers-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }
+  .numbers-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .numbers-stat span { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
+  .numbers-stat strong { font-size: 20px; }
+  @media (max-width: 760px) {
+    body { padding: 14px 10px 70px; }
+    #app-screen, #login-screen { width: min(100%, calc(100vw - 20px)); }
+    .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .tab { text-align: center; padding: 10px 8px; font-size: 12px; }
+    .grid-99 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+    .grid-cell { min-height: 48px; padding: 7px 2px; }
+    .numbers-summary { grid-template-columns: 1fr; }
+    .topbar { align-items: flex-start; flex-direction: column; }
+  }
+  @media (max-width: 420px) {
+    .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-99 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card { padding: 14px; border-radius: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="card">
+  <h3 style="margin-bottom:12px;">ACCESO ADMIN</h3>
+  <label>Teléfono</label>
+  <input id="phone" type="tel" placeholder="8888 0000" />
+  <label>PIN</label>
+  <input id="pin" type="password" maxlength="4" placeholder="••••" />
+  <button class="btn" onclick="login()">Entrar</button>
+  <p style="font-size:12px;color:var(--text-dim);margin-top:10px;text-align:center;">Demo: 88880000 / 1234 o numerazo-admin / 1234</p>
+</div>
+
+<div id="app-screen" style="display:none;">
+  <div class="topbar">
+    <span class="brand">Panel Admin</span>
+    <span class="tenant"><span id="tenant-name">—</span> <button class="btn small ghost" onclick="logoutAdmin()">Salir</button></span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-panel="sorteos">Sorteos</div>
+    <div class="tab" data-panel="numeros">Números</div>
+    <div class="tab" data-panel="loterias">Loterías</div>
+    <div class="tab" data-panel="vendedores">Vendedores</div>
+    <div class="tab" data-panel="comisiones">Comisiones</div>
+    <div class="tab" data-panel="caja">Caja</div>
+    <div class="tab" data-panel="reglas">Reglas</div>
+  </div>
+
+  <!-- SORTEOS -->
+  <div class="panel active" id="panel-sorteos">
+    <div class="card">
+      <h3>SORTEOS</h3>
+      <div id="draws-list"><span class="sub">Cargando...</span></div>
+    </div>
+
+    <div class="card">
+      <h3>CREAR SORTEO</h3>
+      <label>Lotería</label>
+      <select id="new-draw-loteria"></select>
+      <label>Fecha y hora del sorteo</label>
+      <input id="new-draw-datetime" type="datetime-local" />
+      <button class="btn ghost" onclick="crearSorteo()">Crear sorteo</button>
+    </div>
+
+    <div class="card">
+      <h3>CERRAR SORTEO</h3>
+      <label>Sorteo</label>
+      <select id="close-draw-select"></select>
+      <label>Número ganador</label>
+      <input id="winning-number" type="text" maxlength="3" placeholder="34" />
+      <label>Bolita Reventado (opcional)</label>
+      <input id="winning-number-addon" type="text" maxlength="2" placeholder="—" />
+      <button class="btn" onclick="cerrarSorteo()">Cerrar sorteo y calcular premios</button>
+    </div>
+  </div>
+
+  <!-- NUMEROS (cuadricula 00-99) -->
+  <div class="panel" id="panel-numeros">
+    <div class="card">
+      <h3>VENTAS POR NÚMERO</h3>
+      <label>Sorteo</label>
+      <select id="numbers-draw-select" onchange="cargarNumeros()">
+        <option value="">Cargando sorteos...</option>
+      </select>
+      <div id="numbers-grid"><span class="sub">Elegí un sorteo para ver el detalle.</span></div>
+    </div>
+  </div>
+
+  <!-- LOTERIAS -->
+  <div class="panel" id="panel-loterias">
+    <div class="card">
+      <h3>LOTERÍAS ACTIVAS</h3>
+      <div id="loterias-list"><span class="sub">Cargando...</span></div>
+    </div>
+    <div class="card">
+      <h3>CREAR LOTERÍA</h3>
+      <label>Nombre (ej: Tica, Nica, Pana)</label>
+      <input id="new-loteria-name" type="text" placeholder="Tica" />
+      <label>Reglas del juego</label>
+      <select id="new-loteria-type"></select>
+      <button class="btn ghost" onclick="crearLoteria()">Crear lotería</button>
+    </div>
+  </div>
+
+  <!-- VENDEDORES -->
+  <div class="panel" id="panel-vendedores">
+    <div class="card">
+      <h3>VENDEDORES</h3>
+      <div id="vendedores-list"><span class="sub">Cargando...</span></div>
+    </div>
+    <div class="card">
+      <h3>CREAR VENDEDOR</h3>
+      <label>Nombre</label>
+      <input id="new-vendedor-name" type="text" placeholder="Nombre completo" />
+      <label>Teléfono</label>
+      <input id="new-vendedor-phone" type="tel" placeholder="8888 0000" />
+      <label>PIN (4 dígitos)</label>
+      <input id="new-vendedor-pin" type="password" maxlength="4" placeholder="••••" />
+      <label>Loterías que puede vender</label>
+      <div class="checklist" id="new-vendedor-loterias"></div>
+      <button class="btn ghost" onclick="crearVendedor()">Crear vendedor</button>
+    </div>
+  </div>
+
+  <!-- COMISIONES -->
+  <div class="panel" id="panel-comisiones">
+    <div class="card">
+      <div class="stat-grid">
+        <div class="stat"><div class="n" id="stat-pending">₡0</div><div class="l">Pendiente por pagar</div></div>
+        <div class="stat"><div class="n" id="stat-vendedores">0</div><div class="l">Vendedores activos</div></div>
+      </div>
+      <h3>ESTA SEMANA</h3>
+      <div id="commissions-list"></div>
+    </div>
+  </div>
+
+  <!-- CAJA -->
+  <div class="panel" id="panel-caja">
+    <div class="card">
+      <h3>SALDOS ACTUALES</h3>
+      <div id="balances-list"></div>
+    </div>
+    <div class="card">
+      <h3>REGISTRAR MOVIMIENTO</h3>
+      <label>Vendedor</label>
+      <select id="vendedor-select"></select>
+      <label>Dirección</label>
+      <select id="direction-select">
+        <option value="admin_a_vendedor">Admin le da efectivo al vendedor (cubre faltante)</option>
+        <option value="vendedor_a_admin">Vendedor entrega ganancias al admin</option>
+      </select>
+      <label>Monto</label>
+      <input id="cash-amount" type="number" placeholder="0" />
+      <label>Nota (opcional)</label>
+      <input id="cash-note" type="text" placeholder="Ej: Sinpe faltante sorteo 6pm" />
+      <button class="btn" onclick="registrarMovimiento()">Registrar movimiento</button>
+    </div>
+  </div>
+
+  <!-- REGLAS -->
+  <div class="panel" id="panel-reglas">
+    <div class="card">
+      <div id="rules-list"><span class="sub">Cargando...</span></div>
+    </div>
+  </div>
+</div>
+
+<script src="ui.js?v=1"></script>
+<script src="admin.js?v=9"></script>
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`panel-${tab.dataset.panel}`).classList.add('active');
+    });
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Vendedor</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#101820" />
+  <style>
+    :root {
+      --bg: #eef2f5;
+      --ink: #111827;
+      --muted: #667085;
+      --panel: #ffffff;
+      --line: #d8dee8;
+      --brand: #101820;
+      --gold: #d9a441;
+      --ok: #087f5b;
+      --danger: #b42318;
+      --shadow: 0 14px 40px rgba(16, 24, 40, .08);
+    }
+
+    html { width: 100%; overflow-x: hidden; }
+    * { box-sizing: border-box; }
+    body {
+      width: 100%;
+      min-width: 0;
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow-x: hidden;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .login-wrap {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background:
+        linear-gradient(135deg, rgba(217,164,65,.18), transparent 38%),
+        radial-gradient(circle at 80% 20%, rgba(16,24,32,.14), transparent 28%),
+        var(--bg);
+    }
+
+    .login-card {
+      width: min(420px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .login-title { font-size: 24px; font-weight: 800; margin: 0 0 6px; }
+    .login-sub { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+    .demo-note { color: var(--muted); font-size: 12px; text-align: center; margin: 12px 0 0; }
+
+    label { display: block; color: var(--muted); font-size: 13px; font-weight: 700; margin-bottom: 7px; }
+    input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      color: var(--ink);
+      padding: 14px 15px;
+      font-size: 18px;
+      outline: none;
+    }
+    input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(217,164,65,.18); }
+
+    .field-stack { display: grid; gap: 14px; }
+    .btn {
+      border: none;
+      border-radius: 8px;
+      background: var(--brand);
+      color: white;
+      padding: 14px 16px;
+      font-weight: 800;
+      min-height: 50px;
+    }
+    .btn.gold { background: var(--gold); color: #1f1604; }
+    .btn.ghost { background: #f4f6f8; color: var(--ink); border: 1px solid var(--line); }
+    .btn.small { min-height: 34px; padding: 8px 11px; font-size: 12px; }
+
+    .app-shell { min-height: 100vh; display: none; grid-template-rows: auto 1fr; }
+    .topbar {
+      background: var(--brand);
+      color: white;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+    }
+    .brand { font-size: 17px; font-weight: 900; letter-spacing: .2px; }
+    .seller { color: rgba(255,255,255,.74); font-size: 13px; text-align: right; display: flex; align-items: center; gap: 10px; }
+    .small-muted { color: var(--muted); font-size: 12px; font-weight: 700; }
+    .topbar .small-muted { color: rgba(255,255,255,.7); }
+
+    .offline-badge {
+      display: none;
+      margin: 12px 18px 0;
+      border-radius: 8px;
+      background: #fff4d6;
+      color: #7a4d00;
+      border: 1px solid #f4cf78;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .workbench {
+      width: min(1280px, calc(100vw - 36px));
+      margin: 0 auto;
+      padding: 16px 18px 24px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);
+      gap: 16px;
+    }
+
+    .panel {
+      min-width: 0;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 1px 2px rgba(16,24,40,.04);
+    }
+    .panel-head {
+      padding: 15px 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .panel-title { margin: 0; font-size: 14px; font-weight: 900; text-transform: uppercase; color: #344054; }
+    .panel-body { padding: 16px; }
+
+    .draws { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      border-radius: 999px;
+      padding: 10px 13px;
+      font-size: 13px;
+      font-weight: 800;
+      color: #344054;
+    }
+    .chip.active { background: var(--brand); border-color: var(--brand); color: white; }
+
+    .sale-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .sale-grid .full { grid-column: 1 / -1; }
+    .money-field, .number-field {
+      min-height: 96px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+    .money-field.active, .number-field.active {
+      border-color: var(--gold);
+      box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217,164,65,.14);
+    }
+    .field-label { color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: 10px; }
+    .field-value {
+      width: 100%;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+      padding: 0;
+      min-height: 36px;
+      font-size: 30px;
+      font-weight: 900;
+      text-align: right;
+    }
+    .field-value:focus { box-shadow: none; border-color: transparent; }
+    .number-field .field-value { text-align: center; letter-spacing: 4px; }
+
+    .toggle-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+    .toggle-row input { width: 20px; height: 20px; margin: 0; }
+    .toggle-title { display: block; font-size: 14px; font-weight: 900; color: var(--ink); }
+    .toggle-copy { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+    .summary-box { border-radius: 8px; background: #f5f7fa; border: 1px solid var(--line); padding: 12px; }
+    .summary-box strong { display: block; font-size: 18px; margin-top: 3px; }
+
+    .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .key {
+      min-height: 58px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      color: var(--ink);
+      font-size: 22px;
+      font-weight: 900;
+    }
+    .key:active { transform: translateY(1px); background: #edf1f5; }
+    .key.action { font-size: 15px; background: #f1f4f7; color: #344054; }
+    .key.submit { grid-column: 1 / -1; background: var(--ok); color: white; border-color: var(--ok); }
+    .quick-amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+    .quick { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-weight: 800; color: #344054; }
+
+    .sales-list { display: grid; gap: 8px; max-height: 390px; overflow: auto; }
+    .sale-row {
+      display: grid;
+      grid-template-columns: 54px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+    .sale-num {
+      height: 42px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: var(--brand);
+      color: white;
+      font-size: 20px;
+      font-weight: 900;
+    }
+    .sale-detail { color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .sale-total { font-size: 16px; font-weight: 900; text-align: right; }
+    .empty-state { color: var(--muted); text-align: center; padding: 26px 10px; font-size: 14px; }
+    .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+    .metric { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fbfcfe; }
+    .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .metric strong { display: block; margin-top: 4px; font-size: 20px; }
+
+    .ticket-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(16,24,40,.58);
+      align-items: flex-end;
+      justify-content: center;
+      z-index: 20;
+      padding: 14px;
+    }
+    .ticket-sheet {
+      width: min(420px, 100%);
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .ticket-preview {
+      font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      border: 1px dashed #b8c1ce;
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+      background: #fafafa;
+    }
+    .ticket-actions { display: grid; gap: 8px; }
+
+    @media (max-width: 980px) {
+      .workbench { width: min(100%, calc(100vw - 24px)); grid-template-columns: 1fr; padding: 12px 0 24px; }
+      .topbar { padding: 12px; align-items: flex-start; }
+      .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .sale-grid { grid-template-columns: 1fr; }
+      .quick-amounts { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 520px) {
+      .topbar { flex-direction: column; }
+      .seller { width: 100%; justify-content: space-between; }
+      .summary, .metrics { grid-template-columns: 1fr; }
+      .field-value { font-size: 26px; }
+      .sale-row { grid-template-columns: 46px 1fr; }
+      .sale-total { grid-column: 2; text-align: left; }
+    }
+  </style>
+</head>
+<body>
+  <div id="login-screen" class="login-wrap">
+    <div class="login-card">
+      <p class="login-title">Punto de venta</p>
+      <p class="login-sub">Ingreso rapido para vendedores autorizados.</p>
+      <div class="field-stack">
+        <div>
+          <label>Telefono</label>
+          <input id="phone" type="tel" placeholder="8888 0000" autocomplete="username" />
+        </div>
+        <div>
+          <label>PIN</label>
+          <input id="pin" type="password" maxlength="4" placeholder="0000" autocomplete="current-password" />
+        </div>
+        <button class="btn gold" onclick="login()">Entrar</button>
+      </div>
+      <p class="demo-note">Demo vendedor: 88881111 / 1234</p>
+    </div>
+  </div>
+
+  <div id="app-screen" class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="brand" id="tenant-label">Loteria</div>
+        <div class="small-muted" id="active-draw-label">Selecciona un sorteo</div>
+      </div>
+      <div class="seller"><span id="seller-label"></span><button class="btn ghost small" onclick="logout()">Salir</button></div>
+    </header>
+
+    <div id="offline-badge" class="offline-badge">Sin conexion: las ventas se guardan y se sincronizan despues.</div>
+
+    <main class="workbench">
+      <section>
+        <div class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">Sorteo activo</h2>
+            <span class="small-muted" id="draw-count">0 abiertos</span>
+          </div>
+          <div class="panel-body">
+            <div id="draws-list" class="draws"></div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head">
+            <h2 class="panel-title">Nueva venta</h2>
+            <span class="small-muted" id="cupo-info"></span>
+          </div>
+          <div class="panel-body">
+            <div class="sale-grid">
+              <div class="number-field active" data-target="numero" onclick="setActiveField('numero')">
+                <div class="field-label">Numero</div>
+                <input id="numero" class="field-value" type="text" maxlength="3" placeholder="00" readonly />
+              </div>
+              <div class="money-field" data-target="monto" onclick="setActiveField('monto')">
+                <div class="field-label">Monto numero</div>
+                <input id="monto" class="field-value" type="text" inputmode="numeric" placeholder="0" readonly />
+              </div>
+              <label class="toggle-row full">
+                <input type="checkbox" id="con-reventado" onchange="toggleReventado()" />
+                <span>
+                  <span class="toggle-title">Agregar Reventado</span>
+                  <span class="toggle-copy">El reventado lleva su propio monto.</span>
+                </span>
+              </label>
+              <div class="money-field full" id="reventado-field" data-target="monto-reventado" onclick="setActiveField('monto-reventado')" style="display:none;">
+                <div class="field-label">Monto reventado</div>
+                <input id="monto-reventado" class="field-value" type="text" inputmode="numeric" placeholder="0" readonly />
+              </div>
+            </div>
+
+            <div class="summary">
+              <div class="summary-box"><span class="small-muted">Numero</span><strong id="summary-main">0</strong></div>
+              <div class="summary-box"><span class="small-muted">Reventado</span><strong id="summary-addon">0</strong></div>
+              <div class="summary-box"><span class="small-muted">Total</span><strong id="summary-total">0</strong></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <aside>
+        <div class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">Teclado</h2>
+            <span class="small-muted" id="active-field-label">Numero</span>
+          </div>
+          <div class="panel-body">
+            <div class="quick-amounts">
+              <button class="quick" onclick="addQuickAmount(500)">500</button>
+              <button class="quick" onclick="addQuickAmount(1000)">1.000</button>
+              <button class="quick" onclick="addQuickAmount(2000)">2.000</button>
+              <button class="quick" onclick="addQuickAmount(5000)">5.000</button>
+            </div>
+            <div class="keypad">
+              <button class="key" onclick="pressDigit('1')">1</button>
+              <button class="key" onclick="pressDigit('2')">2</button>
+              <button class="key" onclick="pressDigit('3')">3</button>
+              <button class="key" onclick="pressDigit('4')">4</button>
+              <button class="key" onclick="pressDigit('5')">5</button>
+              <button class="key" onclick="pressDigit('6')">6</button>
+              <button class="key" onclick="pressDigit('7')">7</button>
+              <button class="key" onclick="pressDigit('8')">8</button>
+              <button class="key" onclick="pressDigit('9')">9</button>
+              <button class="key action" onclick="clearActiveField()">Limpiar</button>
+              <button class="key" onclick="pressDigit('0')">0</button>
+              <button class="key action" onclick="backspaceActiveField()">Borrar</button>
+              <button class="key submit" onclick="registrarVenta()">Registrar venta</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head">
+            <h2 class="panel-title">Ventas de hoy</h2>
+            <span class="small-muted" id="total">0</span>
+          </div>
+          <div class="panel-body">
+            <div class="metrics">
+              <div class="metric"><span>Tiquetes</span><strong id="tickets-count">0</strong></div>
+              <div class="metric"><span>Reventado</span><strong id="addon-total">0</strong></div>
+            </div>
+            <div id="sales-list" class="sales-list">
+              <div class="empty-state">Todavia no hay ventas cargadas.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel" style="margin-top:16px;">
+          <div class="panel-head">
+            <h2 class="panel-title">Comisiones</h2>
+            <span class="small-muted" id="commission-week-total">0</span>
+          </div>
+          <div class="panel-body">
+            <div id="commissions-list" class="sales-list">
+              <div class="empty-state">Todavia no hay comisiones calculadas.</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div id="ticket-modal" class="ticket-modal">
+    <div class="ticket-sheet">
+      <div id="ticket-preview" class="ticket-preview"></div>
+      <div class="ticket-actions">
+        <button class="btn" onclick="imprimirBluetooth()">Imprimir Bluetooth</button>
+        <button class="btn gold" onclick="compartirWhatsApp()">Compartir por WhatsApp</button>
+        <button class="btn ghost" onclick="cerrarTicket()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="ui.js?v=1"></script>
+  <script src="app.js?v=6"></script>
+</body>
+</html>

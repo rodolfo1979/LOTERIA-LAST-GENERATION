@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Superadmin</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo+Expanded:wght@700;800&family=Inter:wght@400;500;600&display=swap');
+  :root {
+    --bg: #0A0A0F; --surface: #14141C; --surface-2: #1D1D28; --border: #2A2A38;
+    --amber: #FFB627; --mint: #00E5A0; --coral: #FF5C6C; --text: #F5F5F7; --text-dim: #8B8B9A;
+  }
+  html { width: 100%; overflow-x: hidden; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { width: 100%; min-width: 0; background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; padding: 20px 16px 80px; overflow-x: hidden; }
+  #app-screen { width: min(980px, calc(100vw - 32px)); margin: 0 auto; }
+  #login-screen { width: min(420px, calc(100vw - 32px)); margin: 40px auto 0; }
+  .topbar { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; gap: 16px; }
+  .topbar .brand { font-family: 'Archivo Expanded', sans-serif; font-weight: 800; font-size: 18px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px; }
+  .tab { flex-shrink: 0; padding: 9px 14px; border-radius: 100px; font-size: 13px; font-weight: 600; color: var(--text-dim); background: var(--surface); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
+  .tab.active { background: linear-gradient(135deg, var(--amber), #FF8A00); color: #14141C; border: none; }
+  .panel { display: none; } .panel.active { display: block; }
+  .card { width: 100%; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 18px; padding: 18px; margin-bottom: 14px; overflow: hidden; }
+  .card h3 { font-size: 13px; color: var(--text-dim); font-weight: 600; margin-bottom: 14px; }
+  label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; font-weight: 500; }
+  input, select { width: 100%; min-width: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 15px; padding: 11px 12px; margin-bottom: 14px; font-family: inherit; }
+  .btn { width: 100%; padding: 13px; border: none; border-radius: 12px; background: linear-gradient(135deg, var(--amber), #FF8A00); color: #14141C; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .btn.ghost { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .btn.small { width: auto; padding: 8px 14px; font-size: 12px; margin-top: 0; }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; min-width: 0; }
+  .row:last-child { border-bottom: none; }
+  .row .name { font-weight: 500; }
+  .row .sub { font-size: 12px; color: var(--text-dim); }
+  .pill { font-size: 11px; padding: 3px 9px; border-radius: 100px; font-weight: 600; }
+  .pill.activo { background: rgba(0,229,160,0.14); color: var(--mint); }
+  .pill.suspendido { background: rgba(255,92,108,0.16); color: var(--coral); }
+  .pill.prueba { background: rgba(255,182,39,0.14); color: var(--amber); }
+  @media (max-width: 760px) {
+    body { padding: 14px 10px 70px; }
+    #app-screen, #login-screen { width: min(100%, calc(100vw - 20px)); }
+    .topbar { align-items: flex-start; flex-direction: column; }
+    .tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .tab { text-align: center; padding: 10px 8px; }
+    .row { align-items: flex-start; flex-direction: column; }
+    .card { padding: 14px; border-radius: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="card">
+  <h3 style="margin-bottom:12px;">ACCESO SUPERADMIN</h3>
+  <label>Teléfono</label>
+  <input id="phone" type="tel" placeholder="8888 0000" />
+  <label>PIN</label>
+  <input id="pin" type="password" maxlength="4" placeholder="••••" />
+  <button class="btn" onclick="login()">Entrar</button>
+  <p style="font-size:12px;color:var(--text-dim);margin-top:10px;text-align:center;">Demo: 80000000 / 9999 o numerazo-superadmin / 9999</p>
+</div>
+
+<div id="app-screen" style="display:none;">
+  <div class="topbar">
+    <span class="brand">Superadmin</span>
+    <button class="btn small ghost" onclick="logoutSuperadmin()">Salir</button>
+  </div>
+  <div class="tabs">
+    <div class="tab active" data-panel="tenants">Tenants</div>
+    <div class="tab" data-panel="planes">Planes</div>
+  </div>
+
+  <div class="panel active" id="panel-tenants">
+    <div class="card">
+      <h3>TENANTS</h3>
+      <div id="tenants-list"><span class="sub">Cargando...</span></div>
+    </div>
+    <div class="card">
+      <h3>CREAR TENANT</h3>
+      <label>Nombre del negocio</label>
+      <input id="new-tenant-name" type="text" placeholder="Loteria Central SA" />
+      <label>Plan</label>
+      <select id="new-tenant-plan"></select>
+      <label>Vence suscripción (opcional)</label>
+      <input id="new-tenant-ends" type="date" />
+      <label>Nombre del admin</label>
+      <input id="new-admin-name" type="text" placeholder="Nombre del dueño/admin" />
+      <label>Teléfono del admin</label>
+      <input id="new-admin-phone" type="tel" placeholder="8888 0000" />
+      <label>PIN del admin</label>
+      <input id="new-admin-pin" type="password" maxlength="4" placeholder="••••" />
+      <button class="btn" onclick="crearTenant()">Crear tenant</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-planes">
+    <div class="card">
+      <h3>PAQUETES</h3>
+      <div id="planes-list"><span class="sub">Cargando...</span></div>
+    </div>
+    <div class="card">
+      <h3>CREAR PAQUETE</h3>
+      <label>Nombre (ej: Básico, Pro, Ilimitado)</label>
+      <input id="new-plan-name" type="text" placeholder="Pro" />
+      <label>Precio mensual (₡)</label>
+      <input id="new-plan-price" type="number" placeholder="25000" />
+      <label>Máx. vendedores (vacío = ilimitado)</label>
+      <input id="new-plan-max-vendedores" type="number" placeholder="10" />
+      <label>Máx. loterías (vacío = ilimitado)</label>
+      <input id="new-plan-max-loterias" type="number" placeholder="5" />
+      <button class="btn" onclick="crearPlan()">Crear paquete</button>
+    </div>
+  </div>
+</div>
+
+<script src="ui.js?v=1"></script>
+<script src="superadmin.js?v=3"></script>
+<script>
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`panel-${tab.dataset.panel}`).classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>

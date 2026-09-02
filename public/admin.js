@@ -95,6 +95,7 @@ function mostrarApp() {
   cargarVendedores();
   cargarReglas();
   cargarLoterias();
+  cargarClientes();
   startNumbersRealtime();
 }
 
@@ -764,6 +765,104 @@ async function registrarMovimiento() {
   document.getElementById('cash-note').value = '';
   cargarVendedores();
   cargarComisiones();
+}
+
+// ---------- CLIENTES PREPAGO ----------
+
+async function cargarClientes() {
+  const res = await fetch(`${API}/clients`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) return;
+
+  const clients = await res.json();
+  window.adminClients = clients;
+
+  const list = document.getElementById('clients-list');
+  list.innerHTML = clients.length ? `<div class="client-grid">${clients.map(client => `
+    <div class="client-card">
+      <div class="client-card-head">
+        <div>
+          <div class="client-name">${client.name}</div>
+          <div class="client-phone">${client.phone || 'sin telefono'}</div>
+        </div>
+        <div class="client-balance">${money(client.balance)}</div>
+      </div>
+      <div class="list-actions">
+        <button class="inline-btn neutral" onclick="seleccionarClienteRecarga(${client.id})">Recargar</button>
+        <button class="inline-btn" onclick="cargarMovimientosCliente(${client.id})">Historial</button>
+      </div>
+    </div>
+  `).join('')}</div>` : '<span class="sub">Todavia no hay clientes prepago.</span>';
+
+  const select = document.getElementById('recharge-client-select');
+  select.innerHTML = clients.map(client => `<option value="${client.id}">${client.name} - ${money(client.balance)}</option>`).join('');
+}
+
+async function crearCliente() {
+  const name = document.getElementById('new-client-name').value;
+  const phone = document.getElementById('new-client-phone').value;
+  const initial_balance = document.getElementById('new-client-balance').value || 0;
+
+  if (!name) { alert('Falta el nombre del cliente'); return; }
+
+  const res = await fetch(`${API}/clients`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ name, phone, initial_balance }),
+  });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) { const err = await readError(res); alert(err.message || 'No se pudo crear el cliente'); return; }
+
+  document.getElementById('new-client-name').value = '';
+  document.getElementById('new-client-phone').value = '';
+  document.getElementById('new-client-balance').value = '';
+  alert('Cliente prepago creado.');
+  cargarClientes();
+}
+
+function seleccionarClienteRecarga(clientId) {
+  document.getElementById('recharge-client-select').value = clientId;
+  document.getElementById('recharge-amount').focus();
+}
+
+async function recargarCliente() {
+  const clientId = document.getElementById('recharge-client-select').value;
+  const amount = document.getElementById('recharge-amount').value;
+  const note = document.getElementById('recharge-note').value;
+
+  if (!clientId || !amount) { alert('Selecciona un cliente y monto'); return; }
+
+  const res = await fetch(`${API}/clients/${clientId}/recharge`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ amount, note }),
+  });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) { const err = await readError(res); alert(err.message || 'No se pudo registrar la recarga'); return; }
+
+  document.getElementById('recharge-amount').value = '';
+  document.getElementById('recharge-note').value = '';
+  alert('Recarga registrada.');
+  cargarClientes();
+  cargarMovimientosCliente(clientId);
+}
+
+async function cargarMovimientosCliente(clientId) {
+  const res = await fetch(`${API}/clients/${clientId}/movements`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) return;
+
+  const movements = await res.json();
+  const client = (window.adminClients || []).find(item => Number(item.id) === Number(clientId));
+  document.getElementById('client-movements-list').innerHTML = movements.length ? movements.map(movement => `
+    <div class="row">
+      <div>
+        <div class="name">${movement.type}</div>
+        <div class="sub">${new Date(movement.created_at).toLocaleString('es-CR', { dateStyle: 'short', timeStyle: 'short' })} · ${movement.user_name || client?.name || ''}</div>
+      </div>
+      <span style="color:${movement.amount < 0 ? 'var(--coral)' : 'var(--mint)'};">${money(movement.amount)}</span>
+    </div>
+  `).join('') : '<span class="sub">Este cliente todavia no tiene movimientos.</span>';
 }
 
 // ---------- REGLAS ----------

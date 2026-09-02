@@ -1,5 +1,5 @@
-const CACHE_NAME = 'vendedor-v4';
-const ARCHIVOS = ['index.html', 'app.js', 'manifest.json'];
+const CACHE_NAME = 'vendedor-v5';
+const ARCHIVOS = ['index.html', 'app.js', 'ui.js', 'manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

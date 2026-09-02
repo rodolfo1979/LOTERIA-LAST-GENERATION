@@ -83,6 +83,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureTenantScope::class
     Route::post('/users', [\App\Http\Controllers\UserController::class, 'store']);
     Route::put('/users/{user}/loterias', [\App\Http\Controllers\UserController::class, 'updateLoterias']);
 
+    // Clientes prepago: recargas y saldo descontable por venta.
+    Route::get('/clients', [\App\Http\Controllers\ClientController::class, 'index']);
+    Route::post('/clients', [\App\Http\Controllers\ClientController::class, 'store']);
+    Route::post('/clients/{client}/recharge', [\App\Http\Controllers\ClientController::class, 'recharge']);
+    Route::get('/clients/{client}/movements', [\App\Http\Controllers\ClientController::class, 'movements']);
+
     // Lista de sorteos para el admin, incluyendo sorteos que ya pasaron el corte.
     Route::get('/draws', [\App\Http\Controllers\DrawController::class, 'index']);
 
@@ -134,6 +140,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureTenantScope::class
             ->where('type', 'venta')
             ->whereDate('created_at', today())
             ->latest()
+            ->with('client:id,name,phone')
             ->get();
 
         $comisiones = Transaction::where('tenant_id', $user->tenant_id)

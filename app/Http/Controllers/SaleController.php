@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Draw;
+use App\Models\Client;
+use App\Models\ClientMovement;
 use App\Models\TenantRule;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
@@ -18,9 +20,15 @@ class SaleController extends Controller
             'amount' => ['required', 'numeric', 'min:1'],
             'with_addon' => ['sometimes', 'boolean'],
             'addon_amount' => ['nullable', 'numeric', 'min:0'],
+            'client_id' => ['nullable', 'integer', 'exists:clients,id'],
+            'payment_mode' => ['nullable', 'in:cash,prepaid'],
+            'allow_cash_fallback' => ['sometimes', 'boolean'],
         ]);
         $data['with_addon'] = (bool) ($data['with_addon'] ?? false);
         $data['addon_amount'] = $data['with_addon'] ? (float) ($data['addon_amount'] ?? 0) : 0;
+        $data['payment_mode'] = $data['payment_mode'] ?? 'cash';
+        $data['allow_cash_fallback'] = (bool) ($data['allow_cash_fallback'] ?? false);
+        $totalVenta = (float) $data['amount'] + (float) $data['addon_amount'];
 
         if ($data['with_addon'] && $data['addon_amount'] <= 0) {
             return response()->json([
@@ -46,6 +54,22 @@ class SaleController extends Controller
             ], 403);
         }
 
+        $client = null;
+        if (! empty($data['client_id'])) {
+            $client = Client::where('tenant_id', $request->user()->tenant_id)
+                ->where('active', true)
+                ->findOrFail($data['client_id']);
+
+            if ($data['payment_mode'] === 'prepaid' && $client->balance() < $totalVenta) {
+                return response()->json([
+                    'message' => 'El cliente no tiene saldo suficiente.',
+                    'client_balance' => $client->balance(),
+                    'required' => $totalVenta,
+                    'can_sell_as_cash' => true,
+                ], 422);
+            }
+        }
+
         $rule = TenantRule::where('tenant_id', $draw->tenant_id)
             ->where('game_type', $draw->game_type)
             ->first();
@@ -55,7 +79,7 @@ class SaleController extends Controller
         // Se envuelve en una transaccion con lock para evitar que dos ventas
         // simultaneas se cuelen justo en el limite (condicion de carrera).
         if ($rule && $rule->max_bet_per_number) {
-            $transaction = DB::transaction(function () use ($request, $draw, $rule, $data) {
+            $transaction = DB::transaction(function () use ($request, $draw, $rule, $data, $client, $totalVenta) {
                 $vendidoActual = Transaction::where('draw_id', $draw->id)
                     ->where('number_played', $data['number_played'])
                     ->where('type', 'venta')
@@ -68,16 +92,36 @@ class SaleController extends Controller
                     return ['error' => true, 'disponible' => max($disponible, 0)];
                 }
 
-                return ['error' => false, 'transaction' => Transaction::create([
+                $sale = Transaction::create([
                     'tenant_id' => $request->user()->tenant_id,
                     'user_id' => $request->user()->id,
+                    'client_id' => $client?->id,
+                    'prepaid_applied' => $client && $data['payment_mode'] === 'prepaid',
                     'draw_id' => $draw->id,
                     'type' => 'venta',
                     'amount' => $data['amount'],
                     'number_played' => $data['number_played'],
                     'with_addon' => $data['with_addon'],
                     'addon_amount' => $data['addon_amount'],
-                ])];
+                    'metadata' => [
+                        'payment_mode' => $client && $data['payment_mode'] === 'prepaid' ? 'prepaid' : 'cash',
+                        'cash_fallback' => $client && $data['payment_mode'] === 'cash' && $data['allow_cash_fallback'],
+                    ],
+                ]);
+
+                if ($client && $data['payment_mode'] === 'prepaid') {
+                    ClientMovement::create([
+                        'tenant_id' => $request->user()->tenant_id,
+                        'client_id' => $client->id,
+                        'user_id' => $request->user()->id,
+                        'transaction_id' => $sale->id,
+                        'type' => 'compra',
+                        'amount' => -1 * $totalVenta,
+                        'note' => "Compra {$draw->name} numero {$data['number_played']}",
+                    ]);
+                }
+
+                return ['error' => false, 'transaction' => $sale->load('client:id,name,phone')];
             });
 
             if ($transaction['error']) {
@@ -93,16 +137,38 @@ class SaleController extends Controller
         }
 
         // Sin limite configurado para este juego -- se vende sin restriccion.
-        $transaction = Transaction::create([
-            'tenant_id' => $request->user()->tenant_id,
-            'user_id' => $request->user()->id,
-            'draw_id' => $draw->id,
-            'type' => 'venta',
-            'amount' => $data['amount'],
-            'number_played' => $data['number_played'],
-            'with_addon' => $data['with_addon'],
-            'addon_amount' => $data['addon_amount'],
-        ]);
+        $transaction = DB::transaction(function () use ($request, $draw, $data, $client, $totalVenta) {
+            $sale = Transaction::create([
+                'tenant_id' => $request->user()->tenant_id,
+                'user_id' => $request->user()->id,
+                'client_id' => $client?->id,
+                'prepaid_applied' => $client && $data['payment_mode'] === 'prepaid',
+                'draw_id' => $draw->id,
+                'type' => 'venta',
+                'amount' => $data['amount'],
+                'number_played' => $data['number_played'],
+                'with_addon' => $data['with_addon'],
+                'addon_amount' => $data['addon_amount'],
+                'metadata' => [
+                    'payment_mode' => $client && $data['payment_mode'] === 'prepaid' ? 'prepaid' : 'cash',
+                    'cash_fallback' => $client && $data['payment_mode'] === 'cash' && $data['allow_cash_fallback'],
+                ],
+            ]);
+
+            if ($client && $data['payment_mode'] === 'prepaid') {
+                ClientMovement::create([
+                    'tenant_id' => $request->user()->tenant_id,
+                    'client_id' => $client->id,
+                    'user_id' => $request->user()->id,
+                    'transaction_id' => $sale->id,
+                    'type' => 'compra',
+                    'amount' => -1 * $totalVenta,
+                    'note' => "Compra {$draw->name} numero {$data['number_played']}",
+                ]);
+            }
+
+            return $sale->load('client:id,name,phone');
+        });
 
         return response()->json($transaction, 201);
     }

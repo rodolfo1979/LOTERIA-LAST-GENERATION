@@ -1,6 +1,8 @@
 const API = '/api';
 
 let activeField = 'numero';
+let clients = [];
+let cashFallback = false;
 
 function getToken() { return localStorage.getItem('token'); }
 function getDrawId() { return localStorage.getItem('draw_id'); }
@@ -77,6 +79,7 @@ async function login() {
   localStorage.setItem('tenant_nombre', data.user.tenant_name || 'Loteria');
   showApp();
   cargarSorteos();
+  cargarClientes();
   cargarDashboard();
 }
 
@@ -90,6 +93,38 @@ function showApp() {
   document.getElementById('seller-label').textContent = localStorage.getItem('vendedor_nombre') || '';
   setActiveField(activeField);
   updateSummary();
+}
+
+async function cargarClientes() {
+  const res = await fetch(`${API}/clients`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) return;
+
+  clients = await res.json();
+  const select = document.getElementById('client-select');
+  select.innerHTML = '<option value="">Cliente normal</option>' + clients.map(client =>
+    `<option value="${client.id}">${client.name} - ₡${money(client.balance)}</option>`
+  ).join('');
+  onClientChange();
+}
+
+function selectedClient() {
+  const id = document.getElementById('client-select')?.value;
+  return clients.find(client => Number(client.id) === Number(id)) || null;
+}
+
+function onClientChange() {
+  cashFallback = false;
+  document.getElementById('cash-fallback-btn').style.display = 'none';
+  document.getElementById('client-warning').style.display = 'none';
+  updateSummary();
+}
+
+function venderComoNormal() {
+  cashFallback = true;
+  document.getElementById('client-warning').textContent = 'Esta venta se registrara como cliente normal. No se descontara saldo prepago.';
+  document.getElementById('client-warning').style.display = 'block';
+  document.getElementById('cash-fallback-btn').style.display = 'none';
 }
 
 async function cargarSorteos() {
@@ -192,9 +227,27 @@ function toggleReventado() {
 function updateSummary() {
   const monto = numberValue('monto');
   const addon = document.getElementById('con-reventado').checked ? numberValue('monto-reventado') : 0;
+  const client = selectedClient();
+  const total = monto + addon;
   document.getElementById('summary-main').textContent = money(monto);
   document.getElementById('summary-addon').textContent = money(addon);
-  document.getElementById('summary-total').textContent = money(monto + addon);
+  document.getElementById('summary-total').textContent = money(total);
+
+  const balanceLabel = document.getElementById('client-balance-label');
+  if (!client) {
+    balanceLabel.textContent = 'Sin cliente prepago';
+    return;
+  }
+
+  balanceLabel.textContent = `Saldo ${money(client.balance)}${cashFallback ? ' - venta normal' : ''}`;
+  if (!cashFallback && total > 0 && Number(client.balance) < total) {
+    document.getElementById('client-warning').textContent = `Saldo insuficiente: tiene ${money(client.balance)} y la venta suma ${money(total)}.`;
+    document.getElementById('client-warning').style.display = 'block';
+    document.getElementById('cash-fallback-btn').style.display = 'inline-flex';
+  } else if (!cashFallback) {
+    document.getElementById('client-warning').style.display = 'none';
+    document.getElementById('cash-fallback-btn').style.display = 'none';
+  }
 }
 
 function ventaPayload() {
@@ -207,6 +260,9 @@ function ventaPayload() {
     amount: numberValue('monto'),
     with_addon: conReventado,
     addon_amount: conReventado ? numberValue('monto-reventado') : 0,
+    client_id: selectedClient()?.id || null,
+    payment_mode: selectedClient() && !cashFallback ? 'prepaid' : 'cash',
+    allow_cash_fallback: cashFallback,
   };
 }
 
@@ -238,6 +294,12 @@ async function registrarVenta() {
 
     if (!res.ok) {
       const err = await parseJsonResponse(res);
+      if (err.can_sell_as_cash) {
+        document.getElementById('client-warning').textContent = `${err.message} Puede venderse como cliente normal.`;
+        document.getElementById('client-warning').style.display = 'block';
+        document.getElementById('cash-fallback-btn').style.display = 'inline-flex';
+        return;
+      }
       alert(err.message || 'No se pudo registrar la venta');
       return;
     }
@@ -246,6 +308,7 @@ async function registrarVenta() {
     agregarVentaALista(creada);
     sumarVentaEnResumen(creada);
     limpiarFormulario();
+    cargarClientes();
     mostrarTicket({ ...venta, ...creada }, true, creada.id);
   } catch {
     guardarVentaPendiente(venta);
@@ -292,13 +355,16 @@ function agregarVentaALista(venta) {
   const amount = Number(venta.amount || 0);
   const addon = Number(venta.addon_amount || 0);
   const total = amount + addon;
+  const clientText = venta.client?.name
+    ? ` · ${venta.client.name} (${venta.prepaid_applied ? 'prepago' : 'normal'})`
+    : '';
   const row = document.createElement('div');
   row.className = 'sale-row';
   row.innerHTML = `
     <div class="sale-num">${String(venta.number_played || '').padStart(2, '0')}</div>
     <div>
       <div><strong>${localStorage.getItem('draw_nombre') || 'Sorteo'}</strong></div>
-      <div class="sale-detail">Numero ${money(amount)}${addon > 0 ? ` + Reventado ${money(addon)}` : ''}</div>
+      <div class="sale-detail">Numero ${money(amount)}${addon > 0 ? ` + Reventado ${money(addon)}` : ''}${clientText}</div>
     </div>
     <div class="sale-total">${money(total)}</div>
   `;
@@ -325,6 +391,10 @@ function limpiarFormulario() {
   document.getElementById('con-reventado').checked = false;
   document.getElementById('reventado-field').style.display = 'none';
   document.getElementById('cupo-info').textContent = '';
+  document.getElementById('client-select').value = '';
+  cashFallback = false;
+  document.getElementById('client-warning').style.display = 'none';
+  document.getElementById('cash-fallback-btn').style.display = 'none';
   setActiveField('numero');
   updateSummary();
 }
@@ -449,6 +519,7 @@ function generarTextoTicket(t) {
   const hora = t.fecha.toLocaleString('es-CR', { dateStyle: 'short', timeStyle: 'short' });
   const amount = Number(t.amount || 0);
   const addon = Number(t.addon_amount || 0);
+  const client = t.client?.name || selectedClient()?.name || '';
 
   return [
     `*${tenant}*`,
@@ -459,6 +530,7 @@ function generarTextoTicket(t) {
     `Numero: ${String(t.number_played).padStart(2, '0')}`,
     `Monto numero:  ${money(amount)}`,
     addon > 0 ? `Reventado:     ${money(addon)}` : '',
+    client ? `Cliente: ${client}${t.prepaid_applied ? ' (prepago)' : ' (normal)'}` : '',
     '--------------------------',
     `Total: ${money(amount + addon)}`,
     `Tiquete: ${t.id}`,

@@ -32,7 +32,7 @@
       overflow-x: hidden;
     }
 
-    button, input { font: inherit; }
+    button, input, select { font: inherit; }
     button { cursor: pointer; }
 
     .login-wrap {
@@ -60,7 +60,7 @@
     .demo-note { color: var(--muted); font-size: 12px; text-align: center; margin: 12px 0 0; }
 
     label { display: block; color: var(--muted); font-size: 13px; font-weight: 700; margin-bottom: 7px; }
-    input {
+    input, select {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -197,6 +197,25 @@
     .toggle-row input { width: 20px; height: 20px; margin: 0; }
     .toggle-title { display: block; font-size: 14px; font-weight: 900; color: var(--ink); }
     .toggle-copy { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .client-box {
+      display: grid;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfcfe;
+    }
+    .client-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 800; }
+    .client-warning {
+      display: none;
+      border: 1px solid #f4cf78;
+      background: #fff8e8;
+      color: #7a4d00;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 800;
+    }
 
     .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
     .summary-box { border-radius: 8px; background: #f5f7fa; border: 1px solid var(--line); padding: 12px; }
@@ -351,6 +370,19 @@
                 <div class="field-label">Monto numero</div>
                 <input id="monto" class="field-value" type="text" inputmode="numeric" placeholder="0" readonly />
               </div>
+              <div class="client-box full">
+                <div>
+                  <label>Cliente prepago opcional</label>
+                  <select id="client-select" onchange="onClientChange()">
+                    <option value="">Cliente normal</option>
+                  </select>
+                </div>
+                <div class="client-line">
+                  <span id="client-balance-label">Sin cliente prepago</span>
+                  <button class="btn ghost small" id="cash-fallback-btn" onclick="venderComoNormal()" style="display:none;" type="button">Vender como normal</button>
+                </div>
+                <div class="client-warning" id="client-warning"></div>
+              </div>
               <label class="toggle-row full">
                 <input type="checkbox" id="con-reventado" onchange="toggleReventado()" />
                 <span>
@@ -447,6 +479,6 @@
   </div>
 
   <script src="ui.js?v=1"></script>
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

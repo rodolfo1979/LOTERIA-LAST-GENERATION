@@ -810,6 +810,7 @@ function verLoteriasVendedor(userId, name) {
     const drawLabel = draw
       ? `${new Date(draw.draw_datetime).toLocaleDateString('es-CR')} ${new Date(draw.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`
       : 'sin sorteo creado';
+    const drawMeta = draw ? `${drawLabel}${drawVisibilityNote(draw)}` : drawLabel;
     const drawId = draw?.id || '';
 
     return `
@@ -817,9 +818,9 @@ function verLoteriasVendedor(userId, name) {
         <div class="assigned-head">
           <div>
             <div class="assigned-title">${loteria.name}</div>
-            <div class="assigned-meta">${drawLabel}</div>
+            <div class="assigned-meta">${drawMeta}</div>
           </div>
-          <span class="pill ${draw?.is_open_for_sales ? 'pending' : 'paid'}">${draw?.is_open_for_sales ? 'vendible' : (draw?.status || 'sin sorteo')}</span>
+          <span class="pill ${draw ? drawPillClass(draw) : 'off'}">${draw ? drawStatusText(draw) : 'sin sorteo'}</span>
         </div>
         <div class="list-actions">
           <button class="inline-btn" ${drawId ? '' : 'disabled'} onclick="verListaVendedor(${userId}, ${loteria.id}, ${drawId || 0}, '${jsArg(name)}', '${jsArg(loteria.name)}')">Ver lista</button>

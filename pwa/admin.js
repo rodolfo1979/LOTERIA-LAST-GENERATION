@@ -142,7 +142,7 @@ async function cargarSorteos() {
       <div class="draw-head">
         <div>
           <div class="draw-name">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</div>
-          <div class="draw-meta">ID #${d.id} · reglas: ${d.game_type}${d.is_active ? '' : ' · desactivado para venta'}</div>
+          <div class="draw-meta">ID #${d.id} · reglas: ${d.game_type}${drawVisibilityNote(d)}</div>
         </div>
         <span class="pill ${drawPillClass(d)}">${drawStatusText(d)}</span>
       </div>
@@ -216,12 +216,22 @@ function llenarSelectLoterias(selectId, selectedId) {
 function drawPillClass(draw) {
   if (!draw.is_active) return 'off';
   if (draw.is_open_for_sales) return 'pending';
+  if (draw.status === 'abierto') return 'risk';
   return 'paid';
 }
 
 function drawStatusText(draw) {
   if (!draw.is_active) return 'desactivado';
-  return draw.is_open_for_sales ? 'vendible' : draw.status;
+  if (draw.is_open_for_sales) return 'vendible';
+  if (draw.status === 'abierto') return 'fuera de hora';
+  return draw.status;
+}
+
+function drawVisibilityNote(draw) {
+  if (!draw.is_active) return ' · desactivado para venta';
+  if (draw.is_open_for_sales) return ' · visible al vendedor';
+  if (draw.status === 'abierto') return ' · no aparece al vendedor: hora/corte vencido';
+  return '';
 }
 
 async function generarSorteosDia() {

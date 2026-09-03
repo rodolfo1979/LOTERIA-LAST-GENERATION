@@ -143,7 +143,7 @@ async function cargarSorteos() {
   const draws = await res.json();
 
   const list = document.getElementById('draws-list');
-  document.getElementById('draw-count').textContent = `${draws.length} abiertos`;
+  document.getElementById('draw-count').textContent = `${draws.length} vendibles`;
   list.innerHTML = draws.map(d => {
     const name = d.name || d.game_type;
     const time = new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
@@ -155,7 +155,7 @@ async function cargarSorteos() {
   }).join('');
 
   if (draws.length === 0) {
-    list.innerHTML = '<div class="empty-state">No hay sorteos abiertos para vender.</div>';
+    list.innerHTML = '<div class="empty-state">No hay sorteos vendibles ahora. En admin deben estar activos y con hora futura antes del corte.</div>';
   }
 
   if (draws.length === 1 && !getDrawId()) {

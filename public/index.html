@@ -124,15 +124,28 @@
     }
 
     .workbench {
-      width: min(1240px, calc(100vw - 32px));
+      width: min(1500px, calc(100vw - 40px));
       margin: 0 auto;
       padding: 18px 16px 28px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+      grid-template-columns: minmax(540px, 700px) minmax(610px, 1fr);
       gap: 18px;
     }
     .workbench > section, .side-rail { min-width: 0; }
-    .side-rail { display: grid; gap: 14px; align-content: start; }
+    .side-rail {
+      display: grid;
+      grid-template-columns: minmax(280px, 320px) minmax(300px, 1fr);
+      gap: 14px;
+      align-content: start;
+    }
+    .desktop-keypad-panel {
+      grid-column: 1;
+      grid-row: 1 / span 2;
+      position: sticky;
+      top: 82px;
+    }
+    .activity-panel { grid-column: 2; }
+    .commission-panel { grid-column: 2; }
 
     .panel {
       min-width: 0;
@@ -292,7 +305,7 @@
       overflow: hidden;
     }
 
-    .sales-list { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
+    .sales-list { display: grid; gap: 8px; max-height: 260px; overflow: auto; }
     .ticket-list { max-height: 260px; }
     .sale-row {
       display: grid;
@@ -350,6 +363,8 @@
     .ticket-summary-line strong { color: var(--ink); font-size: 14px; margin: 0 2px; }
     .activity-panel .panel-body,
     .commission-panel .panel-body { padding: 12px; }
+    .activity-panel .sales-list,
+    .commission-panel .sales-list { max-height: 250px; }
 
     .ticket-modal {
       display: none;
@@ -402,9 +417,17 @@
       opacity: .55;
     }
 
+    @media (max-width: 1180px) {
+      .workbench {
+        width: min(100%, calc(100vw - 28px));
+        grid-template-columns: 1fr;
+      }
+      .side-rail { grid-template-columns: minmax(280px, 340px) minmax(300px, 1fr); }
+    }
     @media (max-width: 980px) {
       .workbench { width: min(100%, calc(100vw - 24px)); grid-template-columns: 1fr; padding: 12px 0 24px; gap: 12px; }
       .topbar { padding: 12px; align-items: flex-start; }
+      .side-rail { grid-template-columns: 1fr; }
       .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .sale-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .quick-amounts { grid-template-columns: repeat(2, 1fr); }
@@ -673,6 +696,6 @@
   </div>
 
   <script src="ui.js?v=1"></script>
-  <script src="app.js?v=22"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>

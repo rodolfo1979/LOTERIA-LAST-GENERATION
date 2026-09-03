@@ -11,6 +11,7 @@ use App\Models\TenantRule;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -18,6 +19,76 @@ use Tests\TestCase;
 class DrawAdministrationTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
+
+    public function test_seller_open_draws_auto_prepares_today_and_preserves_manual_deactivation(): void
+    {
+        Carbon::setTestNow('2026-09-04 08:00:00');
+
+        $tenant = $this->tenant();
+        $admin = $this->user($tenant->id, 'admin', '88880000');
+        $seller = $this->user($tenant->id, 'vendedor', '88881111');
+        $loteria = Loteria::create(['tenant_id' => $tenant->id, 'name' => 'Tica', 'game_type' => 'tiempos']);
+        $seller->loterias()->sync([$loteria->id]);
+
+        Draw::create([
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'name' => 'Tica',
+            'game_type' => 'tiempos',
+            'draw_datetime' => '2026-09-03 10:00:00',
+            'cutoff_minutes' => 15,
+            'status' => 'abierto',
+            'is_active' => true,
+        ]);
+
+        Draw::create([
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'name' => 'Tica',
+            'game_type' => 'tiempos',
+            'draw_datetime' => '2026-09-03 20:00:00',
+            'cutoff_minutes' => 15,
+            'status' => 'abierto',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($seller);
+
+        $this->getJson('/api/draws/open')
+            ->assertOk()
+            ->assertJsonCount(2)
+            ->assertJsonFragment(['draw_datetime' => '2026-09-04T10:00:00.000000Z'])
+            ->assertJsonFragment(['draw_datetime' => '2026-09-04T20:00:00.000000Z']);
+
+        $this->assertDatabaseCount('draws', 4);
+
+        $morningDraw = Draw::where('loteria_id', $loteria->id)
+            ->where('draw_datetime', '2026-09-04 10:00:00')
+            ->firstOrFail();
+
+        Sanctum::actingAs($admin);
+
+        $this->patchJson("/api/draws/{$morningDraw->id}/active", ['is_active' => false])
+            ->assertOk();
+
+        Sanctum::actingAs($seller);
+
+        $this->getJson('/api/draws/open')
+            ->assertOk()
+            ->assertJsonCount(1)
+            ->assertJsonMissing(['id' => $morningDraw->id]);
+
+        $this->assertDatabaseCount('draws', 4);
+
+        Carbon::setTestNow();
+    }
 
     public function test_admin_can_generate_daily_draws_and_disable_one_for_sales(): void
     {

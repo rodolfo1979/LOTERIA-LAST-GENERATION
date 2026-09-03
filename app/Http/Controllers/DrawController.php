@@ -8,6 +8,7 @@ use App\Models\DrawNumberLimit;
 use App\Models\Loteria;
 use App\Models\TenantRule;
 use App\Models\Transaction;
+use App\Services\DailyDrawService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
@@ -18,6 +19,8 @@ class DrawController extends Controller
         if (! in_array($request->user()->role, ['admin', 'dueno'])) {
             abort(403);
         }
+
+        app(DailyDrawService::class)->ensureForTenant($request->user()->tenant_id);
 
         return Draw::where('tenant_id', $request->user()->tenant_id)
             ->latest('draw_datetime')
@@ -128,55 +131,16 @@ class DrawController extends Controller
             'date' => ['required', 'date_format:Y-m-d'],
         ]);
 
-        $date = Carbon::createFromFormat('Y-m-d', $data['date'])->startOfDay();
-        $created = collect();
-        $existing = collect();
-        $withoutSchedule = collect();
-
-        $loterias = Loteria::where('tenant_id', $request->user()->tenant_id)
-            ->where('active', true)
-            ->orderBy('name')
-            ->get();
-
-        foreach ($loterias as $loteria) {
-            $baseDraw = Draw::where('tenant_id', $request->user()->tenant_id)
-                ->where('loteria_id', $loteria->id)
-                ->latest('draw_datetime')
-                ->first();
-
-            if (! $baseDraw) {
-                $withoutSchedule->push($loteria->name);
-                continue;
-            }
-
-            $drawDateTime = $date->copy()->setTimeFrom($baseDraw->draw_datetime);
-            $draw = Draw::where('tenant_id', $request->user()->tenant_id)
-                ->where('loteria_id', $loteria->id)
-                ->where('draw_datetime', $drawDateTime)
-                ->first();
-
-            if ($draw) {
-                $existing->push($draw);
-                continue;
-            }
-
-            $created->push(Draw::create([
-                'tenant_id' => $request->user()->tenant_id,
-                'loteria_id' => $loteria->id,
-                'name' => $loteria->name,
-                'game_type' => $loteria->game_type,
-                'draw_datetime' => $drawDateTime,
-                'cutoff_minutes' => $baseDraw->cutoff_minutes,
-                'status' => 'abierto',
-                'is_active' => true,
-            ]));
-        }
+        $result = app(DailyDrawService::class)->ensureForTenant(
+            $request->user()->tenant_id,
+            Carbon::createFromFormat('Y-m-d', $data['date'])->startOfDay(),
+        );
 
         return response()->json([
             'message' => 'Sorteos del dia preparados.',
-            'created_count' => $created->count(),
-            'existing_count' => $existing->count(),
-            'without_schedule' => $withoutSchedule->values(),
+            'created_count' => $result['created']->count(),
+            'existing_count' => $result['existing']->count(),
+            'without_schedule' => $result['without_schedule'],
         ]);
     }
 

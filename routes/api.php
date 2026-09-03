@@ -4,6 +4,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\SaleController;
 use App\Models\Draw;
 use App\Models\Transaction;
+use App\Services\DailyDrawService;
 use Illuminate\Support\Facades\Route;
 
 // Login por telefono + PIN, sin contrasenas complejas.
@@ -27,6 +28,8 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureTenantScope::class
 
     // Sorteos abiertos para el vendedor autenticado (los chips de la pantalla).
     Route::get('/draws/open', function (\Illuminate\Http\Request $request) {
+        app(DailyDrawService::class)->ensureForTenant($request->user()->tenant_id);
+
         $query = Draw::where('tenant_id', $request->user()->tenant_id)
             ->where('status', 'abierto')
             ->where('is_active', true)

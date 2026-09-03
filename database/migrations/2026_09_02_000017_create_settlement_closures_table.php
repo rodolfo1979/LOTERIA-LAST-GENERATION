@@ -27,7 +27,7 @@ return new class extends Migration
             $table->json('snapshot')->nullable();
             $table->timestamps();
 
-            $table->index(['tenant_id', 'user_id', 'period_from', 'period_to']);
+            $table->index(['tenant_id', 'user_id', 'period_from', 'period_to'], 'settlement_period_idx');
         });
     }
 

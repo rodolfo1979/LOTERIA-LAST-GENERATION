@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vendedor-v23';
+const CACHE_NAME = 'vendedor-v24';
 const ARCHIVOS = ['index.html', 'app.js', 'ui.js', 'manifest.json'];
 
 self.addEventListener('install', (event) => {

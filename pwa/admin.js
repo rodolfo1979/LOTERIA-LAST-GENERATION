@@ -141,7 +141,7 @@ async function cargarSorteos() {
     <div class="draw-item">
       <div class="draw-head">
         <div>
-          <div class="draw-name">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div class="draw-name">${d.name || d.game_type} · ${formatDrawDateTime(d.draw_datetime)}</div>
           <div class="draw-meta">ID #${d.id} · reglas: ${d.game_type}${drawVisibilityNote(d)}</div>
         </div>
         <span class="pill ${drawPillClass(d)}">${drawStatusText(d)}</span>
@@ -156,19 +156,19 @@ async function cargarSorteos() {
 
   const closeSelect = document.getElementById('close-draw-select');
   closeSelect.innerHTML = abiertos.map(d =>
-    `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
+    `<option value="${d.id}">${d.name || d.game_type} · ${formatDrawTime(d.draw_datetime)} (#${d.id})</option>`
   ).join('') || '<option value="">No hay sorteos abiertos</option>';
 
   const numbersSelect = document.getElementById('numbers-draw-select');
   numbersSelect.innerHTML = draws.map(d =>
-    `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
+    `<option value="${d.id}">${d.name || d.game_type} · ${formatDrawTime(d.draw_datetime)} (#${d.id})</option>`
   ).join('') || '<option value="">No hay sorteos creados</option>';
 
   const ticketSearchSelect = document.getElementById('ticket-search-draw-select');
   if (ticketSearchSelect) {
     const selected = ticketSearchSelect.value;
     ticketSearchSelect.innerHTML = '<option value="">Todos los sorteos</option>' + draws.map(d =>
-      `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
+      `<option value="${d.id}">${d.name || d.game_type} · ${formatDrawDateTime(d.draw_datetime)} (#${d.id})</option>`
     ).join('');
     ticketSearchSelect.value = selected;
   }
@@ -177,7 +177,7 @@ async function cargarSorteos() {
   if (limitDrawSelect) {
     const selected = limitDrawSelect.value;
     limitDrawSelect.innerHTML = draws.map(d =>
-      `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
+      `<option value="${d.id}">${d.name || d.game_type} · ${formatDrawTime(d.draw_datetime)} (#${d.id})</option>`
     ).join('') || '<option value="">No hay sorteos creados</option>';
     if (selected && draws.some(d => Number(d.id) === Number(selected))) limitDrawSelect.value = selected;
     limitDrawSelect.onchange = cargarLimitesNumeros;
@@ -187,7 +187,7 @@ async function cargarSorteos() {
   if (reportDrawSelect) {
     const selected = reportDrawSelect.value;
     reportDrawSelect.innerHTML = '<option value="">Todos los sorteos</option>' + draws.map(d =>
-      `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</option>`
+      `<option value="${d.id}">${d.name || d.game_type} · ${formatDrawDateTime(d.draw_datetime)}</option>`
     ).join('');
     reportDrawSelect.value = selected;
   }
@@ -199,7 +199,41 @@ async function cargarSorteos() {
   }
 }
 
+function drawDateParts(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+  if (!match) return null;
+  return {
+    year: match[1],
+    month: match[2],
+    day: match[3],
+    hour: match[4],
+    minute: match[5],
+  };
+}
+
+function formatDrawDateTime(value) {
+  const parts = drawDateParts(value);
+  if (!parts) return '';
+  return `${Number(parts.day)}/${Number(parts.month)}/${parts.year} ${formatHour(parts.hour, parts.minute)}`;
+}
+
+function formatDrawTime(value) {
+  const parts = drawDateParts(value);
+  if (!parts) return '';
+  return formatHour(parts.hour, parts.minute);
+}
+
+function formatHour(hour, minute) {
+  const h24 = Number(hour);
+  const suffix = h24 >= 12 ? 'p. m.' : 'a. m.';
+  const h12 = h24 % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${minute} ${suffix}`;
+}
+
 function toDatetimeLocal(value) {
+  const parts = drawDateParts(value);
+  if (parts) return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+
   const date = new Date(value);
   const pad = number => String(number).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -643,7 +677,7 @@ async function cargarMonitorNumeros() {
       <div class="heat-card">
         <div class="heat-card-title">
           <span>${draw.name || draw.game_type}</span>
-          <span class="sub">${new Date(draw.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</span>
+          <span class="sub">${formatDrawTime(draw.draw_datetime)}</span>
         </div>
         ${top.length ? top.map(item => {
           const total = Number(item.grand_total || item.total);
@@ -665,7 +699,14 @@ function findLatestDrawForLoteria(loteriaId) {
   const draws = adminDraws.filter(d => Number(d.loteria_id) === Number(loteriaId));
   if (!draws.length) return null;
 
-  return draws.find(d => d.is_open_for_sales) || draws[0];
+  const today = toDatetimeLocal(new Date()).slice(0, 10);
+  const todaysDraws = draws.filter(d => toDatetimeLocal(d.draw_datetime).slice(0, 10) === today);
+
+  return todaysDraws.find(d => d.is_open_for_sales)
+    || todaysDraws.find(d => d.status === 'abierto' && d.is_active)
+    || todaysDraws[0]
+    || draws.find(d => d.is_open_for_sales)
+    || draws[0];
 }
 
 // ---------- LOTERIAS ----------
@@ -808,7 +849,7 @@ function verLoteriasVendedor(userId, name) {
   list.innerHTML = `<div class="assigned-list">${vendedor.loterias.map(loteria => {
     const draw = findLatestDrawForLoteria(loteria.id);
     const drawLabel = draw
-      ? `${new Date(draw.draw_datetime).toLocaleDateString('es-CR')} ${new Date(draw.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}`
+      ? formatDrawDateTime(draw.draw_datetime)
       : 'sin sorteo creado';
     const drawMeta = draw ? `${drawLabel}${drawVisibilityNote(draw)}` : drawLabel;
     const drawId = draw?.id || '';

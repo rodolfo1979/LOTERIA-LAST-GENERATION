@@ -10,6 +10,21 @@ function getDrawId() { return localStorage.getItem('draw_id'); }
 function money(value) { return Number(value || 0).toLocaleString('es-CR'); }
 function numberValue(id) { return parseInt(document.getElementById(id).value.replace(/\D/g, '') || '0', 10); }
 
+function drawDateParts(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})[T\s](\d{2}):(\d{2})/);
+  if (!match) return null;
+  return { hour: match[4], minute: match[5] };
+}
+
+function formatDrawTime(value) {
+  const parts = drawDateParts(value);
+  if (!parts) return '';
+  const h24 = Number(parts.hour);
+  const suffix = h24 >= 12 ? 'p. m.' : 'a. m.';
+  const h12 = h24 % 12 || 12;
+  return `${String(h12).padStart(2, '0')}:${parts.minute} ${suffix}`;
+}
+
 function authHeaders(extra = {}) {
   return {
     Accept: 'application/json',
@@ -146,7 +161,7 @@ async function cargarSorteos() {
   document.getElementById('draw-count').textContent = `${draws.length} vendibles`;
   list.innerHTML = draws.map(d => {
     const name = d.name || d.game_type;
-    const time = new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
+    const time = formatDrawTime(d.draw_datetime);
     return `
       <button class="chip ${d.id == getDrawId() ? 'active' : ''}" onclick="seleccionarSorteo(${d.id}, '${name.replace(/'/g, '')}', '${time}')">
         ${name} ${time}
@@ -160,7 +175,7 @@ async function cargarSorteos() {
 
   if (draws.length === 1 && !getDrawId()) {
     const name = draws[0].name || draws[0].game_type;
-    const time = new Date(draws[0].draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' });
+    const time = formatDrawTime(draws[0].draw_datetime);
     seleccionarSorteo(draws[0].id, name, time);
   } else {
     updateDrawLabel();

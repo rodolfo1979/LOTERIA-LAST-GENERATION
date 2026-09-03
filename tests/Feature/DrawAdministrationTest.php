@@ -90,6 +90,67 @@ class DrawAdministrationTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_auto_prepared_draw_keeps_admin_edited_time_without_recreating_old_time(): void
+    {
+        Carbon::setTestNow('2026-09-04 08:00:00');
+
+        $tenant = $this->tenant();
+        $admin = $this->user($tenant->id, 'admin', '88880000');
+        $seller = $this->user($tenant->id, 'vendedor', '88881111');
+        $loteria = Loteria::create(['tenant_id' => $tenant->id, 'name' => 'Nica', 'game_type' => 'tiempos']);
+        $seller->loterias()->sync([$loteria->id]);
+
+        Draw::create([
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'name' => 'Nica',
+            'game_type' => 'tiempos',
+            'draw_datetime' => '2026-09-03 10:00:00',
+            'cutoff_minutes' => 15,
+            'status' => 'abierto',
+            'is_active' => true,
+        ]);
+
+        Sanctum::actingAs($seller);
+
+        $this->getJson('/api/draws/open')
+            ->assertOk()
+            ->assertJsonCount(1);
+
+        $todayDraw = Draw::where('loteria_id', $loteria->id)
+            ->where('draw_datetime', '2026-09-04 10:00:00')
+            ->firstOrFail();
+
+        Sanctum::actingAs($admin);
+
+        $this->putJson("/api/draws/{$todayDraw->id}", [
+            'loteria_id' => $loteria->id,
+            'draw_datetime' => '2026-09-04 12:00:00',
+            'cutoff_minutes' => 15,
+            'is_active' => true,
+        ])->assertOk();
+
+        $this->getJson('/api/draws')
+            ->assertOk();
+
+        $this->assertDatabaseMissing('draws', [
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'draw_datetime' => '2026-09-04 10:00:00',
+        ]);
+
+        $this->assertDatabaseHas('draws', [
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'draw_datetime' => '2026-09-04 12:00:00',
+            'is_active' => true,
+        ]);
+
+        $this->assertDatabaseCount('draws', 2);
+
+        Carbon::setTestNow();
+    }
+
     public function test_admin_can_generate_daily_draws_and_disable_one_for_sales(): void
     {
         $tenant = $this->tenant();

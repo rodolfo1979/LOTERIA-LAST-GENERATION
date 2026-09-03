@@ -21,6 +21,16 @@ class DailyDrawService
             ->get();
 
         foreach ($loterias as $loteria) {
+            $targetDayDraws = Draw::where('tenant_id', $tenantId)
+                ->where('loteria_id', $loteria->id)
+                ->whereBetween('draw_datetime', [$day->copy(), $day->copy()->endOfDay()])
+                ->get();
+
+            if ($targetDayDraws->isNotEmpty()) {
+                $existing = $existing->merge($targetDayDraws);
+                continue;
+            }
+
             $scheduleDraws = Draw::where('tenant_id', $tenantId)
                 ->where('loteria_id', $loteria->id)
                 ->orderByDesc('draw_datetime')

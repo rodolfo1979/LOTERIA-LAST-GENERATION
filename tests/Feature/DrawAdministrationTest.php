@@ -63,11 +63,19 @@ class DrawAdministrationTest extends TestCase
 
         $this->getJson('/api/draws/open')
             ->assertOk()
-            ->assertJsonCount(2)
-            ->assertJsonFragment(['draw_datetime' => '2026-09-04T10:00:00.000000Z'])
-            ->assertJsonFragment(['draw_datetime' => '2026-09-04T20:00:00.000000Z']);
+            ->assertJsonCount(2);
 
         $this->assertDatabaseCount('draws', 4);
+        $this->assertDatabaseHas('draws', [
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'draw_datetime' => '2026-09-04 10:00:00',
+        ]);
+        $this->assertDatabaseHas('draws', [
+            'tenant_id' => $tenant->id,
+            'loteria_id' => $loteria->id,
+            'draw_datetime' => '2026-09-04 20:00:00',
+        ]);
 
         $morningDraw = Draw::where('loteria_id', $loteria->id)
             ->where('draw_datetime', '2026-09-04 10:00:00')

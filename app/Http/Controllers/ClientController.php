@@ -92,8 +92,8 @@ class ClientController extends Controller
         }
 
         return $client->movements()
-            ->with(['user:id,name', 'transaction:id,draw_id,number_played'])
-            ->latest()
+            ->with(['user:id,name', 'transaction:id,draw_id,number_played,amount,addon_amount,prepaid_applied,metadata', 'transaction.draw:id,name'])
+            ->orderByDesc('id')
             ->limit(50)
             ->get()
             ->map(fn (ClientMovement $movement) => [
@@ -104,6 +104,24 @@ class ClientController extends Controller
                 'created_at' => $movement->created_at,
                 'user_name' => $movement->user?->name,
                 'number_played' => $movement->transaction?->number_played,
+                'draw_name' => $movement->transaction?->draw?->name,
+                'sale_total' => $movement->transaction
+                    ? (float) $movement->transaction->amount + (float) $movement->transaction->addon_amount
+                    : null,
+                'prepaid_applied' => (bool) ($movement->transaction?->prepaid_applied ?? false),
             ]);
+    }
+
+    public function destroy(Request $request, Client $client)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $client->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        $client->update(['active' => false]);
+
+        return response()->json([
+            'message' => 'Cliente eliminado de la lista activa. Su historial queda guardado.',
+        ]);
     }
 }

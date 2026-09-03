@@ -3,6 +3,7 @@ const API = '/api';
 let activeField = 'numero';
 let clients = [];
 let cashFallback = false;
+let ticketItems = [];
 
 function getToken() { return localStorage.getItem('token'); }
 function getDrawId() { return localStorage.getItem('draw_id'); }
@@ -93,6 +94,8 @@ function showApp() {
   document.getElementById('seller-label').textContent = localStorage.getItem('vendedor_nombre') || '';
   setActiveField(activeField);
   updateSummary();
+  updateSubmitLabels();
+  renderTicketItems();
 }
 
 async function cargarClientes() {
@@ -122,9 +125,14 @@ function onClientChange() {
 
 function venderComoNormal() {
   cashFallback = true;
+  ticketItems = ticketItems.map(item => item.payment_mode === 'prepaid'
+    ? { ...item, payment_mode: 'cash', allow_cash_fallback: true }
+    : item
+  );
   document.getElementById('client-warning').textContent = 'Esta venta se registrara como cliente normal. No se descontara saldo prepago.';
   document.getElementById('client-warning').style.display = 'block';
   document.getElementById('cash-fallback-btn').style.display = 'none';
+  renderTicketItems();
 }
 
 async function cargarSorteos() {
@@ -179,7 +187,9 @@ function setActiveField(field) {
     el.classList.toggle('active', el.dataset.target === field);
   });
   const labels = { numero: 'Numero', monto: 'Monto numero', 'monto-reventado': 'Monto reventado' };
-  document.getElementById('active-field-label').textContent = labels[field] || 'Campo';
+  document.querySelectorAll('.active-field-label').forEach(el => {
+    el.textContent = labels[field] || 'Campo';
+  });
 }
 
 function pressDigit(digit) {
@@ -190,6 +200,7 @@ function pressDigit(digit) {
   input.value = current + digit;
   if (activeField === 'numero' && input.value.length >= 2) consultarCupo();
   updateSummary();
+  previewListaNumeros();
 }
 
 function backspaceActiveField() {
@@ -197,12 +208,14 @@ function backspaceActiveField() {
   input.value = input.value.slice(0, -1);
   if (activeField === 'numero') consultarCupo();
   updateSummary();
+  previewListaNumeros();
 }
 
 function clearActiveField() {
   document.getElementById(activeField).value = '';
   if (activeField === 'numero') document.getElementById('cupo-info').textContent = '';
   updateSummary();
+  previewListaNumeros();
 }
 
 function addQuickAmount(amount) {
@@ -210,6 +223,7 @@ function addQuickAmount(amount) {
   const input = document.getElementById(activeField);
   input.value = String(numberValue(activeField) + amount);
   updateSummary();
+  previewListaNumeros();
 }
 
 function toggleReventado() {
@@ -222,6 +236,7 @@ function toggleReventado() {
     setActiveField('monto');
   }
   updateSummary();
+  previewListaNumeros();
 }
 
 function updateSummary() {
@@ -253,69 +268,323 @@ function updateSummary() {
 function ventaPayload() {
   const rawNumero = document.getElementById('numero').value.replace(/\D/g, '');
   const conReventado = document.getElementById('con-reventado').checked;
+  const client = selectedClient();
 
   return {
     draw_id: getDrawId(),
+    draw_name: localStorage.getItem('draw_nombre') || 'Sorteo',
+    draw_time: localStorage.getItem('draw_hora') || '',
     number_played: rawNumero.padStart(2, '0'),
     amount: numberValue('monto'),
     with_addon: conReventado,
     addon_amount: conReventado ? numberValue('monto-reventado') : 0,
-    client_id: selectedClient()?.id || null,
-    payment_mode: selectedClient() && !cashFallback ? 'prepaid' : 'cash',
+    client_id: client?.id || null,
+    client,
+    payment_mode: client && !cashFallback ? 'prepaid' : 'cash',
     allow_cash_fallback: cashFallback,
   };
 }
 
+function parseListaNumeros(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return [];
+
+  const toEntry = (number, amount = null) => ({
+    number: String(number || '').padStart(2, '0'),
+    amount,
+  });
+
+  if (/^\d+$/.test(raw)) {
+    if (raw.length % 2 !== 0) return null;
+    const entries = [];
+    for (let i = 0; i < raw.length; i += 2) {
+      entries.push(toEntry(raw.slice(i, i + 2)));
+    }
+    return entries;
+  }
+
+  const segments = raw.split(/[,;\n/]+/).map(item => item.trim()).filter(Boolean);
+  if (segments.length > 1) {
+    const singleParts = segments.map(segment => segment.match(/\d+/g) || []);
+    if (singleParts.every(parts => parts.length === 1)) {
+      const values = singleParts.map(parts => parts[0]);
+      if (values.every(part => part.length <= 2)) {
+        return values.map(part => toEntry(part));
+      }
+      if (values.length % 2 === 0 && values.every((part, index) => index % 2 !== 0 || part.length <= 2)) {
+        const entries = [];
+        for (let i = 0; i < values.length; i += 2) {
+          entries.push(toEntry(values[i], Number(values[i + 1])));
+        }
+        return entries;
+      }
+    }
+
+    return segments.map(segment => {
+      const parts = segment.match(/\d+/g) || [];
+      if (!parts.length) return toEntry('');
+      if (parts.length === 1) return toEntry(parts[0]);
+      return toEntry(parts[0], Number(parts.slice(1).join('')));
+    });
+  }
+
+  const parts = raw.match(/\d+/g) || [];
+  if (parts.length > 0 && parts.every(part => part.length <= 2)) {
+    return parts.map(part => toEntry(part));
+  }
+
+  if (parts.length > 0 && parts.length % 2 === 0 && parts.every((part, index) => index % 2 !== 0 || part.length <= 2)) {
+    const entries = [];
+    for (let i = 0; i < parts.length; i += 2) {
+      entries.push(toEntry(parts[i], Number(parts[i + 1])));
+    }
+    return entries;
+  }
+
+  return null;
+}
+
+function updateSubmitLabels() {
+  const batchValue = document.getElementById('batch-numbers')?.value.trim() || '';
+  const addon = document.getElementById('con-reventado')?.checked ? numberValue('monto-reventado') : 0;
+  const batchLabel = addon ? 'Agregar lista con reventado' : 'Agregar lista';
+  const saleLabel = batchValue ? batchLabel : 'Agregar a tiquete';
+
+  document.querySelectorAll('.key.submit').forEach(button => {
+    button.textContent = saleLabel;
+  });
+
+  const batchButton = document.getElementById('batch-submit-btn');
+  if (batchButton) batchButton.textContent = batchLabel;
+}
+
+function previewListaNumeros() {
+  const input = document.getElementById('batch-numbers');
+  const preview = document.getElementById('batch-preview');
+  const addon = document.getElementById('con-reventado')?.checked ? numberValue('monto-reventado') : 0;
+
+  updateSubmitLabels();
+
+  if (!input || !preview) return;
+
+  const entries = parseListaNumeros(input.value);
+  if (entries === null) {
+    preview.textContent = 'Formato no reconocido';
+    preview.style.color = 'var(--danger)';
+    return;
+  }
+
+  const invalid = entries.filter(entry => !/^\d{2}$/.test(entry.number) || (entry.amount !== null && (!Number.isFinite(entry.amount) || entry.amount <= 0)));
+  if (invalid.length) {
+    preview.textContent = 'Revisa numeros o montos de la lista';
+    preview.style.color = 'var(--danger)';
+    return;
+  }
+
+  const previewItems = entries.slice(0, 8).map(entry => entry.amount ? `${entry.number} ${money(entry.amount)}` : entry.number);
+  preview.style.color = '';
+  preview.textContent = entries.length
+    ? `${entries.length} numeros: ${previewItems.join(', ')}${entries.length > 8 ? '...' : ''}${addon ? ` · Rev ${money(addon)} c/u` : ''}`
+    : '0 numeros detectados';
+}
+
 async function registrarVenta() {
+  const batchInput = document.getElementById('batch-numbers');
+  const batchValue = batchInput?.value.trim() || '';
+  const rawNumero = document.getElementById('numero').value.replace(/\D/g, '');
+
+  if (batchValue) {
+    await registrarListaNumeros();
+    return;
+  }
+
+  if (!rawNumero && document.activeElement === batchInput) {
+    await registrarListaNumeros();
+    return;
+  }
+
+  await registrarVentaIndividual();
+}
+
+async function registrarVentaIndividual() {
   const venta = ventaPayload();
   const rawNumero = document.getElementById('numero').value.replace(/\D/g, '');
 
   if (!venta.draw_id) { alert('Elegi un sorteo primero'); return; }
-  if (!rawNumero) { alert('Falta el numero'); return; }
+  if (!rawNumero) { alert('Falta el numero. Si vas a cargar una lista, pega la lista en el campo de WhatsApp o usa el boton Agregar lista.'); return; }
   if (!venta.amount) { alert('Falta el monto del numero'); return; }
   if (venta.with_addon && !venta.addon_amount) { alert('Falta el monto del Reventado'); return; }
 
-  if (!navigator.onLine) {
-    guardarVentaPendiente(venta);
-    agregarVentaALista(venta);
-    sumarVentaEnResumen(venta);
-    limpiarFormulario();
-    mostrarTicket(venta, false);
+  agregarItemTiquete(venta);
+  limpiarFormulario();
+}
+
+async function registrarListaNumeros() {
+  const batchInput = document.getElementById('batch-numbers');
+  const entries = parseListaNumeros(batchInput?.value || '');
+  const base = ventaPayload();
+
+  if (!base.draw_id) { alert('Elegi un sorteo primero'); return; }
+  if (entries === null) { alert('No pude reconocer la lista. Usa 45,12,08 o 45 1000, 12 1000.'); return; }
+  if (!entries.length) { alert('Pega una lista de numeros primero.'); return; }
+  if (entries.some(entry => !/^\d{2}$/.test(entry.number))) { alert('Todos los numeros deben ser de 2 digitos.'); return; }
+  if (entries.some(entry => entry.amount !== null && (!Number.isFinite(entry.amount) || entry.amount <= 0))) { alert('Revisa los montos de la lista.'); return; }
+  if (entries.some(entry => entry.amount === null) && !base.amount) { alert('Falta el monto del numero. Ese monto se aplica a los numeros que no traen monto en la lista.'); return; }
+  if (base.with_addon && !base.addon_amount) { alert('Falta el monto del Reventado.'); return; }
+
+  entries.forEach(entry => {
+    agregarItemTiquete({ ...base, number_played: entry.number, amount: Number(entry.amount ?? base.amount) });
+  });
+
+  if (batchInput) batchInput.value = '';
+  previewListaNumeros();
+  limpiarFormulario();
+}
+
+function agregarItemTiquete(venta) {
+  ticketItems.push({
+    ...venta,
+    temp_id: Date.now() + '-' + Math.random().toString(16).slice(2),
+  });
+  renderTicketItems();
+}
+
+function eliminarItemTiquete(tempId) {
+  ticketItems = ticketItems.filter(item => item.temp_id !== tempId);
+  renderTicketItems();
+}
+
+async function limpiarTiqueteEnPreparacion() {
+  if (!ticketItems.length) return;
+  const confirmar = window.showAppConfirm
+    ? await showAppConfirm('Esto elimina los numeros cargados antes de generar el tiquete.', 'Limpiar tiquete')
+    : window.confirm('Eliminar los numeros cargados antes de generar el tiquete?');
+  if (!confirmar) return;
+  ticketItems = [];
+  renderTicketItems();
+}
+
+function renderTicketItems() {
+  const list = document.getElementById('ticket-items-list');
+  const count = document.getElementById('ticket-items-count');
+  const total = document.getElementById('ticket-items-total');
+  const generateButton = document.getElementById('generate-ticket-btn');
+  if (!list || !count || !total || !generateButton) return;
+
+  const totalTicket = ticketItems.reduce((sum, item) => sum + Number(item.amount || 0) + Number(item.addon_amount || 0), 0);
+  count.textContent = String(ticketItems.length);
+  total.textContent = money(totalTicket);
+  generateButton.disabled = ticketItems.length === 0;
+
+  if (!ticketItems.length) {
+    list.innerHTML = '<div class="empty-state">No hay numeros cargados para el tiquete.</div>';
     return;
   }
 
-  try {
-    const res = await fetch(`${API}/sales`, {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify(venta),
-    });
-    if (await handleAuthFailure(res)) return;
+  list.innerHTML = ticketItems.map(item => {
+    const addon = Number(item.addon_amount || 0);
+    const totalItem = Number(item.amount || 0) + addon;
+    const detail = `${item.draw_name || 'Sorteo'} · Numero ${money(item.amount)}${addon > 0 ? ` + Reventado ${money(addon)}` : ''}${item.client?.name ? ` · ${item.client.name}` : ''}`;
+    return `
+      <div class="sale-row pending-row">
+        <div class="sale-num">${String(item.number_played || '').padStart(2, '0')}</div>
+        <div>
+          <div><strong>${money(totalItem)}</strong></div>
+          <div class="sale-detail">${detail}</div>
+        </div>
+        <button class="btn danger small" onclick="eliminarItemTiquete('${item.temp_id}')" type="button">Eliminar</button>
+      </div>
+    `;
+  }).join('');
+}
 
-    if (!res.ok) {
-      const err = await parseJsonResponse(res);
-      if (err.can_sell_as_cash) {
-        document.getElementById('client-warning').textContent = `${err.message} Puede venderse como cliente normal.`;
-        document.getElementById('client-warning').style.display = 'block';
-        document.getElementById('cash-fallback-btn').style.display = 'inline-flex';
-        return;
-      }
-      alert(err.message || 'No se pudo registrar la venta');
-      return;
+async function generarTiquete() {
+  if (!ticketItems.length) {
+    alert('Primero agrega numeros al tiquete.');
+    return;
+  }
+
+  const prepaidClientIds = [...new Set(ticketItems.filter(item => item.payment_mode === 'prepaid' && item.client_id).map(item => item.client_id))];
+  if (prepaidClientIds.length > 1) {
+    alert('Un tiquete no puede mezclar varios clientes prepago.');
+    return;
+  }
+
+  const prepaidClient = ticketItems.find(item => item.payment_mode === 'prepaid' && item.client_id)?.client || null;
+  const totalTicket = ticketItems.reduce((sum, item) => sum + Number(item.amount || 0) + Number(item.addon_amount || 0), 0);
+  if (prepaidClient && Number(prepaidClient.balance) < totalTicket) {
+    document.getElementById('client-warning').textContent = `Saldo insuficiente: tiene ${money(prepaidClient.balance)} y el tiquete suma ${money(totalTicket)}.`;
+    document.getElementById('client-warning').style.display = 'block';
+    document.getElementById('cash-fallback-btn').style.display = 'inline-flex';
+    return;
+  }
+
+  const confirmar = window.showAppConfirm
+    ? await showAppConfirm(`Generar tiquete con ${ticketItems.length} numeros?\nTotal: ${money(totalTicket)}`, 'Generar tiquete')
+    : window.confirm(`Generar tiquete con ${ticketItems.length} numeros? Total: ${money(totalTicket)}`);
+  if (!confirmar) return;
+
+  const pendientes = [...ticketItems];
+  const ventasTicket = [];
+  const errores = [];
+  let tienePendientesOffline = false;
+
+  for (const item of pendientes) {
+    const venta = { ...item };
+    delete venta.temp_id;
+    delete venta.draw_name;
+    delete venta.draw_time;
+    delete venta.client;
+
+    if (!navigator.onLine) {
+      guardarVentaPendiente(venta);
+      agregarVentaALista(item);
+      sumarVentaEnResumen(item);
+      ventasTicket.push({ ...item, id: 'PEND-' + Date.now() + '-' + item.number_played, sincronizada: false });
+      tienePendientesOffline = true;
+      continue;
     }
 
-    const creada = await res.json();
-    agregarVentaALista(creada);
-    sumarVentaEnResumen(creada);
-    limpiarFormulario();
-    cargarClientes();
-    mostrarTicket({ ...venta, ...creada }, true, creada.id);
-  } catch {
-    guardarVentaPendiente(venta);
-    agregarVentaALista(venta);
-    sumarVentaEnResumen(venta);
-    limpiarFormulario();
-    mostrarTicket(venta, false);
+    try {
+      const res = await fetch(`${API}/sales`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(venta),
+      });
+      if (await handleAuthFailure(res)) return;
+
+      if (!res.ok) {
+        const err = await parseJsonResponse(res);
+        errores.push(`${item.number_played}: ${err.message || 'no se pudo registrar'}`);
+        continue;
+      }
+
+      const creada = await res.json();
+      const itemCreado = { ...item, ...creada, draw_name: item.draw_name, client: creada.client || item.client, sincronizada: true };
+      agregarVentaALista(itemCreado);
+      sumarVentaEnResumen(itemCreado);
+      ventasTicket.push(itemCreado);
+    } catch {
+      guardarVentaPendiente(venta);
+      agregarVentaALista(item);
+      sumarVentaEnResumen(item);
+      ventasTicket.push({ ...item, id: 'PEND-' + Date.now() + '-' + item.number_played, sincronizada: false });
+      tienePendientesOffline = true;
+    }
+  }
+
+  ticketItems = ticketItems.filter(item => !ventasTicket.some(done => done.temp_id === item.temp_id));
+  renderTicketItems();
+  await cargarClientes();
+  await cargarComisionesDashboard();
+
+  if (ventasTicket.length) {
+    mostrarTicketLista(ventasTicket, !tienePendientesOffline, prepaidClient);
+    limpiarVentasVisibles();
+  }
+
+  if (errores.length) {
+    alert(`Se registraron ${ventasTicket.length} de ${pendientes.length}.\nLos no registrados quedan en el tiquete en preparacion para eliminarlos o corregirlos.\n\nNo registrados:\n${errores.slice(0, 8).join('\n')}${errores.length > 8 ? '\n...' : ''}`);
   }
 }
 
@@ -363,7 +632,7 @@ function agregarVentaALista(venta) {
   row.innerHTML = `
     <div class="sale-num">${String(venta.number_played || '').padStart(2, '0')}</div>
     <div>
-      <div><strong>${localStorage.getItem('draw_nombre') || 'Sorteo'}</strong></div>
+      <div><strong>${venta.draw_name || venta.draw?.name || localStorage.getItem('draw_nombre') || 'Sorteo'}</strong></div>
       <div class="sale-detail">Numero ${money(amount)}${addon > 0 ? ` + Reventado ${money(addon)}` : ''}${clientText}</div>
     </div>
     <div class="sale-total">${money(total)}</div>
@@ -384,6 +653,13 @@ function sumarVentaEnResumen(venta) {
   document.getElementById('addon-total').textContent = money(currentAddon + addon);
 }
 
+function limpiarVentasVisibles() {
+  document.getElementById('sales-list').innerHTML = '<div class="empty-state">Todavia no hay ventas cargadas.</div>';
+  document.getElementById('total').textContent = '0';
+  document.getElementById('tickets-count').textContent = '0';
+  document.getElementById('addon-total').textContent = '0';
+}
+
 function limpiarFormulario() {
   document.getElementById('numero').value = '';
   document.getElementById('monto').value = '';
@@ -397,6 +673,25 @@ function limpiarFormulario() {
   document.getElementById('cash-fallback-btn').style.display = 'none';
   setActiveField('numero');
   updateSummary();
+  updateSubmitLabels();
+}
+
+async function limpiarPantallaVendedor() {
+  const confirmar = window.showAppConfirm
+    ? await showAppConfirm('Esto limpia la pantalla de trabajo. Las ventas registradas y las comisiones no se borran del sistema.', 'Limpiar pantalla')
+    : window.confirm('Limpiar la pantalla de trabajo? Las ventas registradas y las comisiones no se borran.');
+
+  if (!confirmar) return;
+
+  limpiarFormulario();
+  ticketItems = [];
+
+  const batchInput = document.getElementById('batch-numbers');
+  if (batchInput) batchInput.value = '';
+  previewListaNumeros();
+  renderTicketItems();
+
+  limpiarVentasVisibles();
 }
 
 async function consultarCupo() {
@@ -414,6 +709,12 @@ async function consultarCupo() {
     if (!res.ok) { info.textContent = ''; return; }
 
     const data = await res.json();
+    if (data.blocked) {
+      info.textContent = 'Numero bloqueado';
+      info.style.color = '#FF5C6C';
+      return;
+    }
+
     if (data.sin_limite) {
       info.textContent = '';
       return;
@@ -452,6 +753,17 @@ async function cargarDashboard() {
     document.getElementById('sales-list').innerHTML = '<div class="empty-state">Todavia no hay ventas cargadas.</div>';
   }
 
+  cargarComisiones(data.commissions);
+}
+
+async function cargarComisionesDashboard() {
+  const res = await fetch(`${API}/me/dashboard`, {
+    headers: authHeaders(),
+  });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) return;
+
+  const data = await res.json();
   cargarComisiones(data.commissions);
 }
 
@@ -507,6 +819,20 @@ function mostrarTicket(venta, sincronizada, ticketId) {
   document.getElementById('ticket-modal').style.display = 'flex';
 }
 
+function mostrarTicketLista(ventas, sincronizada, client) {
+  ticketActual = {
+    tipo: 'lista',
+    items: ventas,
+    id: 'LIST-' + Date.now(),
+    sincronizada,
+    client,
+    fecha: new Date(),
+  };
+
+  document.getElementById('ticket-preview').textContent = generarTextoTicket(ticketActual);
+  document.getElementById('ticket-modal').style.display = 'flex';
+}
+
 function cerrarTicket() {
   document.getElementById('ticket-modal').style.display = 'none';
   ticketActual = null;
@@ -521,6 +847,34 @@ function generarTextoTicket(t) {
   const addon = Number(t.addon_amount || 0);
   const client = t.client?.name || selectedClient()?.name || '';
 
+  if (t.tipo === 'lista') {
+    const items = t.items || [];
+    const totalNumero = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const totalReventado = items.reduce((sum, item) => sum + Number(item.addon_amount || 0), 0);
+    const lineas = items.map(item => {
+      const itemAmount = Number(item.amount || 0);
+      const itemAddon = Number(item.addon_amount || 0);
+      return `${String(item.number_played).padStart(2, '0')}  Numero ${money(itemAmount)}${itemAddon > 0 ? ` + Rev ${money(itemAddon)}` : ''}`;
+    });
+
+    return [
+      `*${tenant}*`,
+      `Vendedor: ${vendedor}`,
+      `Sorteo: ${sorteo}`,
+      `Fecha: ${hora}`,
+      '--------------------------',
+      `Lista: ${items.length} numeros`,
+      ...lineas,
+      client ? `Cliente: ${client}` : '',
+      '--------------------------',
+      `Total numeros:   ${money(totalNumero)}`,
+      totalReventado > 0 ? `Total reventado: ${money(totalReventado)}` : '',
+      `Total: ${money(totalNumero + totalReventado)}`,
+      `Tiquete: ${t.id}`,
+      t.sincronizada ? 'Estado: registrado' : 'Estado: pendiente de sincronizar',
+    ].filter(Boolean).join('\n');
+  }
+
   return [
     `*${tenant}*`,
     `Vendedor: ${vendedor}`,
@@ -534,7 +888,7 @@ function generarTextoTicket(t) {
     '--------------------------',
     `Total: ${money(amount + addon)}`,
     `Tiquete: ${t.id}`,
-    t.sincronizada ? '' : '(pendiente de sincronizar)',
+    t.sincronizada ? 'Estado: registrado' : 'Estado: pendiente de sincronizar',
   ].filter(Boolean).join('\n');
 }
 
@@ -595,4 +949,28 @@ async function compartirWhatsApp() {
   }
 
   window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+}
+
+async function copiarTicket() {
+  if (!ticketActual) return;
+
+  const texto = generarTextoTicket(ticketActual);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(texto);
+    } else {
+      const textarea = document.createElement('textarea');
+      textarea.value = texto;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+    }
+    alert('Tiquete copiado. Ya podes pegarlo en WhatsApp.');
+  } catch {
+    alert('No se pudo copiar automaticamente. Mantene presionado el tiquete para copiarlo manualmente.');
+  }
 }

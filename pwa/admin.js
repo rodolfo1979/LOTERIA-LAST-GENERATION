@@ -4,6 +4,8 @@ let numbersRefreshTimer = null;
 let loadingNumbers = false;
 let sellerListRefreshTimer = null;
 let activeSellerList = null;
+let clientsRefreshTimer = null;
+let activeClientHistoryId = null;
 
 function getToken() { return localStorage.getItem('admin_token'); }
 
@@ -51,7 +53,12 @@ async function handleAuthFailure(res) {
 
 async function readError(res) {
   try {
-    return await res.json();
+    const data = await res.json();
+    if (data.errors) {
+      const first = Object.values(data.errors).flat().find(Boolean);
+      if (first) return { ...data, message: first };
+    }
+    return data;
   } catch {
     return { message: 'No se pudo completar la accion.' };
   }
@@ -90,6 +97,14 @@ function mostrarApp() {
   const today = isoToday();
   document.getElementById('report-from').value = document.getElementById('report-from').value || today;
   document.getElementById('report-to').value = document.getElementById('report-to').value || today;
+  document.getElementById('generate-draw-date').value = document.getElementById('generate-draw-date').value || today;
+  const ticketSearchInput = document.getElementById('ticket-search-number');
+  if (ticketSearchInput && !ticketSearchInput.dataset.ready) {
+    ticketSearchInput.dataset.ready = '1';
+    ticketSearchInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') buscarTiquetesPorNumero();
+    });
+  }
   cargarSorteos();
   cargarComisiones();
   cargarVendedores();
@@ -97,6 +112,18 @@ function mostrarApp() {
   cargarLoterias();
   cargarClientes();
   startNumbersRealtime();
+  startClientsRealtime();
+}
+
+function startClientsRealtime() {
+  if (clientsRefreshTimer) clearInterval(clientsRefreshTimer);
+  clientsRefreshTimer = setInterval(() => {
+    const panel = document.getElementById('panel-clientes');
+    if (!panel?.classList.contains('active')) return;
+
+    cargarClientes();
+    if (activeClientHistoryId) cargarMovimientosCliente(activeClientHistoryId, { quiet: true, noScroll: true, skipClientRefresh: true });
+  }, 10000);
 }
 
 // ---------- SORTEOS ----------
@@ -107,17 +134,22 @@ async function cargarSorteos() {
   if (!res.ok) return;
   const draws = await res.json();
   adminDraws = draws;
-  const abiertos = draws.filter(d => d.status === 'abierto');
+  const abiertos = draws.filter(d => d.status === 'abierto' && d.is_active);
 
   const list = document.getElementById('draws-list');
   list.innerHTML = draws.length ? draws.map(d => `
     <div class="draw-item">
       <div class="draw-head">
         <div>
-          <div class="draw-name">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</div>
-          <div class="draw-meta">ID #${d.id} · reglas: ${d.game_type}</div>
+          <div class="draw-name">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</div>
+          <div class="draw-meta">ID #${d.id} · reglas: ${d.game_type}${d.is_active ? '' : ' · desactivado para venta'}</div>
         </div>
-        <span class="pill ${d.is_open_for_sales ? 'pending' : 'paid'}">${d.is_open_for_sales ? 'vendible' : d.status}</span>
+        <span class="pill ${drawPillClass(d)}">${drawStatusText(d)}</span>
+      </div>
+      <div class="draw-actions">
+        ${d.status === 'abierto' ? `<button class="inline-btn" onclick="editarSorteo(${d.id})">Editar</button>` : ''}
+        ${d.status === 'abierto' ? `<button class="inline-btn neutral" onclick="toggleSorteoActivo(${d.id}, ${d.is_active ? 'false' : 'true'})">${d.is_active ? 'Desactivar' : 'Activar'}</button>` : ''}
+        <button class="inline-btn danger" onclick="eliminarSorteo(${d.id})">Eliminar</button>
       </div>
     </div>
   `).join('') : '<span class="sub">No hay sorteos creados.</span>';
@@ -132,6 +164,25 @@ async function cargarSorteos() {
     `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
   ).join('') || '<option value="">No hay sorteos creados</option>';
 
+  const ticketSearchSelect = document.getElementById('ticket-search-draw-select');
+  if (ticketSearchSelect) {
+    const selected = ticketSearchSelect.value;
+    ticketSearchSelect.innerHTML = '<option value="">Todos los sorteos</option>' + draws.map(d =>
+      `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleDateString('es-CR')} ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
+    ).join('');
+    ticketSearchSelect.value = selected;
+  }
+
+  const limitDrawSelect = document.getElementById('limit-draw-select');
+  if (limitDrawSelect) {
+    const selected = limitDrawSelect.value;
+    limitDrawSelect.innerHTML = draws.map(d =>
+      `<option value="${d.id}">${d.name || d.game_type} · ${new Date(d.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })} (#${d.id})</option>`
+    ).join('') || '<option value="">No hay sorteos creados</option>';
+    if (selected && draws.some(d => Number(d.id) === Number(selected))) limitDrawSelect.value = selected;
+    limitDrawSelect.onchange = cargarLimitesNumeros;
+  }
+
   const reportDrawSelect = document.getElementById('report-draw-select');
   if (reportDrawSelect) {
     const selected = reportDrawSelect.value;
@@ -141,7 +192,134 @@ async function cargarSorteos() {
     reportDrawSelect.value = selected;
   }
 
-  if (draws.length) cargarNumeros();
+  if (draws.length) {
+    cargarNumeros();
+    cargarLimitesNumeros();
+    cargarMonitorNumeros();
+  }
+}
+
+function toDatetimeLocal(value) {
+  const date = new Date(value);
+  const pad = number => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function llenarSelectLoterias(selectId, selectedId) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = (window.adminLoterias || []).map(loteria =>
+    `<option value="${loteria.id}" ${Number(loteria.id) === Number(selectedId) ? 'selected' : ''}>${loteria.name} (${loteria.game_type})</option>`
+  ).join('');
+}
+
+function drawPillClass(draw) {
+  if (!draw.is_active) return 'off';
+  if (draw.is_open_for_sales) return 'pending';
+  return 'paid';
+}
+
+function drawStatusText(draw) {
+  if (!draw.is_active) return 'desactivado';
+  return draw.is_open_for_sales ? 'vendible' : draw.status;
+}
+
+async function generarSorteosDia() {
+  const date = document.getElementById('generate-draw-date').value;
+  if (!date) { alert('Selecciona una fecha.'); return; }
+
+  const res = await fetch(`${API}/draws/generate-day`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ date }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudieron cargar los sorteos del dia'); return; }
+
+  const missing = data.without_schedule?.length
+    ? `\nSin hora base: ${data.without_schedule.join(', ')}. Crea esos sorteos manualmente una vez para que luego se repliquen.`
+    : '';
+  alert(`Sorteos preparados: ${data.created_count} nuevos, ${data.existing_count} ya existian.${missing}`);
+  cargarSorteos();
+}
+
+async function toggleSorteoActivo(drawId, isActive) {
+  const accion = isActive ? 'activar' : 'desactivar';
+  if (!await showAppConfirm(`Vas a ${accion} este sorteo para ventas.`, 'Confirmar sorteo')) return;
+
+  const res = await fetch(`${API}/draws/${drawId}/active`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ is_active: isActive }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo cambiar el sorteo'); return; }
+
+  alert(data.message || 'Sorteo actualizado.');
+  cargarSorteos();
+}
+
+async function eliminarSorteo(drawId) {
+  if (!await showAppConfirm('Si el sorteo no tiene ventas se elimina. Si ya tiene movimientos, se desactiva para proteger el historial.', 'Eliminar sorteo')) return;
+
+  const res = await fetch(`${API}/draws/${drawId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo eliminar el sorteo'); return; }
+
+  alert(data.message || 'Sorteo actualizado.');
+  cargarSorteos();
+}
+
+function editarSorteo(drawId) {
+  const draw = adminDraws.find(item => Number(item.id) === Number(drawId));
+  if (!draw) return;
+
+  llenarSelectLoterias('edit-draw-loteria', draw.loteria_id);
+  document.getElementById('edit-draw-id').value = draw.id;
+  document.getElementById('edit-draw-datetime').value = toDatetimeLocal(draw.draw_datetime);
+  document.getElementById('edit-draw-cutoff').value = draw.cutoff_minutes ?? 15;
+  document.getElementById('edit-draw-active').checked = Boolean(draw.is_active);
+
+  const loteriaSelect = document.getElementById('edit-draw-loteria');
+  loteriaSelect.disabled = Number(draw.sales_count || 0) > 0;
+
+  const card = document.getElementById('edit-draw-card');
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelarEditarSorteo() {
+  document.getElementById('edit-draw-card').style.display = 'none';
+  document.getElementById('edit-draw-id').value = '';
+}
+
+async function guardarSorteoEditado() {
+  const drawId = document.getElementById('edit-draw-id').value;
+  const loteria_id = document.getElementById('edit-draw-loteria').value;
+  const draw_datetime = document.getElementById('edit-draw-datetime').value;
+  const cutoff_minutes = document.getElementById('edit-draw-cutoff').value || 0;
+  const is_active = document.getElementById('edit-draw-active').checked;
+
+  if (!drawId || !loteria_id || !draw_datetime) { alert('Faltan datos para editar el sorteo.'); return; }
+
+  const res = await fetch(`${API}/draws/${drawId}`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ loteria_id, draw_datetime, cutoff_minutes, is_active }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo editar el sorteo'); return; }
+
+  alert(data.message || 'Sorteo actualizado.');
+  cancelarEditarSorteo();
+  cargarSorteos();
 }
 
 async function crearSorteo() {
@@ -246,11 +424,12 @@ function renderNumberGrid(numeros) {
       const addonTotal = Number(n.addon_total || 0);
       const amountText = grandTotal > 0
         ? `${money(grandTotal)}${addonTotal > 0 ? `<br><span>Rev ${money(addonTotal)}</span>` : ''}`
-        : '—';
+        : (n.blocked ? 'Bloq.' : '—');
+      const limitText = n.limit_amount ? `<br><span>Lim ${money(n.limit_amount)}</span>` : '';
       return `
-      <div class="grid-cell ${n.en_riesgo ? 'risk' : (n.total > 0 ? 'has-sales' : '')}">
+      <div class="grid-cell ${n.blocked ? 'blocked' : (n.en_riesgo ? 'risk' : (n.total > 0 ? 'has-sales' : ''))}">
         <div class="num">${n.numero}</div>
-        <div class="amt">${amountText}</div>
+        <div class="amt">${amountText}${limitText}</div>
       </div>
     `;
     }).join('')}</div>`;
@@ -289,8 +468,187 @@ function startNumbersRealtime() {
     const numbersPanel = document.getElementById('panel-numeros');
     if (numbersPanel?.classList.contains('active')) {
       cargarNumeros();
+      cargarMonitorNumeros();
     }
   }, 5000);
+}
+
+function parseAdminNumbers(value) {
+  return String(value || '')
+    .split(/[^\d]+/)
+    .map(item => item.trim())
+    .filter(Boolean)
+    .map(item => item.padStart(2, '0'));
+}
+
+async function cargarLimitesNumeros() {
+  const drawId = document.getElementById('limit-draw-select')?.value;
+  const list = document.getElementById('number-limits-list');
+  if (!drawId || !list) return;
+
+  const res = await fetch(`${API}/draws/${drawId}/number-limits`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  if (!res.ok) { list.innerHTML = '<span class="sub">No se pudieron cargar los limites.</span>'; return; }
+
+  const limits = await res.json();
+  list.innerHTML = limits.length ? limits.map(limit => `
+    <div class="row">
+      <div>
+        <div class="name">${limit.number_played} ${limit.blocked ? '<span class="pill off">bloqueado</span>' : ''}</div>
+        <div class="sub">${limit.max_amount ? `Limite ${money(limit.max_amount)}` : 'Sin limite de monto'}${limit.note ? ` · ${limit.note}` : ''}</div>
+      </div>
+      <button class="inline-btn danger" onclick="eliminarLimiteNumero(${drawId}, '${limit.number_played}')">Quitar</button>
+    </div>
+  `).join('') : '<span class="sub">No hay numeros bloqueados o limitados en este sorteo.</span>';
+}
+
+async function guardarLimitesNumeros() {
+  const drawId = document.getElementById('limit-draw-select')?.value;
+  const numbers = parseAdminNumbers(document.getElementById('limit-numbers')?.value);
+  const max_amount = document.getElementById('limit-amount')?.value || null;
+  const blocked = document.getElementById('limit-blocked')?.checked || false;
+
+  if (!drawId) { alert('Selecciona un sorteo.'); return; }
+  if (!numbers.length) { alert('Escribe uno o varios numeros.'); return; }
+  if (numbers.some(number => !/^\d{2}$/.test(number))) { alert('Todos los numeros deben ser de 2 digitos.'); return; }
+  if (!blocked && !max_amount) { alert('Marca bloquear o escribe un limite de monto.'); return; }
+
+  const res = await fetch(`${API}/draws/${drawId}/number-limits`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ numbers, max_amount, blocked }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo guardar el limite'); return; }
+
+  document.getElementById('limit-numbers').value = '';
+  document.getElementById('limit-amount').value = '';
+  document.getElementById('limit-blocked').checked = false;
+  alert(data.message || 'Limites actualizados.');
+  cargarLimitesNumeros();
+  cargarNumeros();
+  cargarMonitorNumeros();
+}
+
+async function eliminarLimiteNumero(drawId, number) {
+  if (!await showAppConfirm(`Quitar limite o bloqueo del numero ${number}?`, 'Quitar limite')) return;
+
+  const res = await fetch(`${API}/draws/${drawId}/number-limits/${number}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo quitar el limite'); return; }
+
+  cargarLimitesNumeros();
+  cargarNumeros();
+  cargarMonitorNumeros();
+}
+
+async function buscarTiquetesPorNumero() {
+  const numberInput = document.getElementById('ticket-search-number');
+  const drawSelect = document.getElementById('ticket-search-draw-select');
+  const target = document.getElementById('ticket-search-results');
+  const number = (numberInput?.value || '').replace(/\D/g, '').padStart(2, '0');
+
+  if (!/^\d{2}$/.test(number)) {
+    alert('Escribe un numero de 2 digitos.');
+    return;
+  }
+
+  target.innerHTML = '<span class="sub">Buscando tiquetes...</span>';
+  const params = new URLSearchParams({ number });
+  if (drawSelect?.value) params.set('draw_id', drawSelect.value);
+
+  const res = await fetch(`${API}/sales/search?${params.toString()}`, { headers: authHeaders() });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) {
+    target.innerHTML = `<span class="sub">${data.message || 'No se pudo buscar el numero.'}</span>`;
+    return;
+  }
+
+  if (!data.items?.length) {
+    target.innerHTML = `<span class="sub">No hay tiquetes registrados para el numero ${data.number}.</span>`;
+    return;
+  }
+
+  target.innerHTML = `
+    <div class="numbers-summary">
+      <div class="numbers-stat"><span>Tiquetes</span><strong>${data.count}</strong></div>
+      <div class="numbers-stat"><span>Normal</span><strong>${money(data.main_total)}</strong></div>
+      <div class="numbers-stat"><span>Reventado</span><strong>${money(data.addon_total)}</strong></div>
+      <div class="numbers-stat"><span>Total</span><strong>${money(data.grand_total)}</strong></div>
+    </div>
+    ${data.items.map(item => {
+      const fecha = new Date(item.created_at).toLocaleString('es-CR', { dateStyle: 'short', timeStyle: 'short' });
+      const drawName = item.draw?.name || item.draw?.loteria_name || 'Sorteo';
+      const client = item.client ? ` · Cliente: ${item.client.name}${item.prepaid_applied ? ' (prepago)' : ''}` : '';
+      return `
+        <div class="ticket-result">
+          <div class="ticket-number">${item.number_played}</div>
+          <div>
+            <div><strong>Tiquete #${item.id}</strong> · ${drawName}</div>
+            <div class="ticket-meta">${fecha} · Vendedor: ${item.seller?.name || 'Sin vendedor'}${client}</div>
+            <div class="ticket-meta">Numero ${money(item.amount)}${item.addon_amount > 0 ? ` + Reventado ${money(item.addon_amount)}` : ''}</div>
+          </div>
+          <div class="ticket-total">${money(item.grand_total)}</div>
+        </div>
+      `;
+    }).join('')}
+  `;
+}
+
+async function cargarMonitorNumeros() {
+  const target = document.getElementById('hot-numbers-dashboard');
+  if (!target || !adminDraws.length) return;
+
+  const activeDraws = adminDraws.filter(draw => draw.status === 'abierto').slice(0, 8);
+  if (!activeDraws.length) {
+    target.innerHTML = '<span class="sub">No hay sorteos abiertos para monitorear.</span>';
+    return;
+  }
+
+  const results = await Promise.all(activeDraws.map(async draw => {
+    try {
+      const res = await fetch(`${API}/draws/${draw.id}/numbers`, { headers: authHeaders() });
+      if (!res.ok) return { draw, numeros: [] };
+      const data = await res.json();
+      return { draw, numeros: data.numeros || [] };
+    } catch {
+      return { draw, numeros: [] };
+    }
+  }));
+
+  target.innerHTML = `<div class="heat-dashboard">${results.map(({ draw, numeros }) => {
+    const top = numeros
+      .filter(item => Number(item.grand_total || item.total) > 0 || item.blocked || item.limit_amount)
+      .sort((a, b) => Number(b.grand_total || b.total) - Number(a.grand_total || a.total))
+      .slice(0, 6);
+    const max = Math.max(...top.map(item => Number(item.grand_total || item.total)), 1);
+
+    return `
+      <div class="heat-card">
+        <div class="heat-card-title">
+          <span>${draw.name || draw.game_type}</span>
+          <span class="sub">${new Date(draw.draw_datetime).toLocaleTimeString('es-CR', { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        ${top.length ? top.map(item => {
+          const total = Number(item.grand_total || item.total);
+          const percent = Math.max(4, Math.round((total / max) * 100));
+          return `
+            <div class="heat-row">
+              <span class="heat-num">${item.numero}</span>
+              <div class="heat-bar"><div class="heat-fill" style="width:${percent}%;"></div></div>
+              <span>${item.blocked ? 'Bloq.' : money(total)}</span>
+            </div>
+          `;
+        }).join('') : '<span class="sub">Sin ventas todavia.</span>'}
+      </div>
+    `;
+  }).join('')}</div>`;
 }
 
 function findLatestDrawForLoteria(loteriaId) {
@@ -310,6 +668,7 @@ async function cargarLoterias() {
     return;
   }
   const loterias = await res.json();
+  window.adminLoterias = loterias;
 
   const list = document.getElementById('loterias-list');
   list.innerHTML = loterias.length ? loterias.map(l => `
@@ -321,6 +680,7 @@ async function cargarLoterias() {
 
   // Poblar selects que dependen de la lista de loterias.
   document.getElementById('new-draw-loteria').innerHTML = loterias.map(l => `<option value="${l.id}">${l.name}</option>`).join('');
+  llenarSelectLoterias('edit-draw-loteria', document.getElementById('edit-draw-loteria')?.value);
 
   const checklist = document.getElementById('new-vendedor-loterias');
   checklist.innerHTML = loterias.map(l => `
@@ -364,16 +724,63 @@ async function cargarVendedoresDetalle() {
     <div class="row">
       <div>
         <div class="name">${v.name}</div>
-        <div class="sub">${(v.loterias || []).map(l => l.name).join(', ') || 'sin loterías asignadas'}</div>
+        <div class="sub">${(v.loterias || []).map(l => l.name).join(', ') || 'sin loterías asignadas'} · ${v.active ? 'activo' : 'desactivado'}</div>
       </div>
       <div class="seller-row-actions">
         <span class="sub">${v.phone}</span>
+        <span class="pill ${v.active ? 'paid' : 'off'}">${v.active ? 'activo' : 'desactivado'}</span>
         <button class="inline-btn neutral" onclick="verLoteriasVendedor(${v.id}, '${jsArg(v.name)}')">Ver loterías</button>
+        <button class="inline-btn" onclick="resetearPinVendedor(${v.id}, '${jsArg(v.name)}')">Reset PIN</button>
+        <button class="inline-btn ${v.active ? 'danger' : 'neutral'}" onclick="cambiarEstadoVendedor(${v.id}, '${jsArg(v.name)}', ${v.active ? 'false' : 'true'})">${v.active ? 'Desactivar' : 'Reactivar'}</button>
       </div>
     </div>
   `).join('') : '<span class="sub">No hay vendedores todavía.</span>';
 
   window.adminVendedoresDetalle = vendedores;
+}
+
+async function resetearPinVendedor(userId, name) {
+  const pin = prompt(`Nuevo PIN de 4 digitos para ${name}`);
+  if (pin === null) return;
+  if (!/^\d{4}$/.test(pin)) {
+    alert('El PIN debe tener exactamente 4 digitos.');
+    return;
+  }
+
+  if (!await showAppConfirm(`Resetear PIN de ${name}?`, 'Reset PIN')) return;
+
+  const res = await fetch(`${API}/users/${userId}/pin`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ pin }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo resetear el PIN'); return; }
+
+  alert(data.message || `PIN actualizado para ${name}.`);
+}
+
+async function cambiarEstadoVendedor(userId, name, active) {
+  const accion = active ? 'reactivar' : 'desactivar';
+  const texto = active
+    ? `Reactivar al vendedor ${name}?`
+    : `Desactivar al vendedor ${name}? No podra iniciar sesion ni vender, pero su historial se conserva.`;
+
+  if (!await showAppConfirm(texto, `${accion.charAt(0).toUpperCase()}${accion.slice(1)} vendedor`)) return;
+
+  const res = await fetch(`${API}/users/${userId}/active`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ active }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo actualizar el vendedor'); return; }
+
+  alert(data.message || 'Vendedor actualizado.');
+  cargarVendedoresDetalle();
+  cargarVendedores();
 }
 
 function verLoteriasVendedor(userId, name) {
@@ -538,12 +945,13 @@ function compartirListaWhatsapp() {
 }
 
 async function crearVendedor() {
-  const name = document.getElementById('new-vendedor-name').value;
-  const phone = document.getElementById('new-vendedor-phone').value;
-  const pin = document.getElementById('new-vendedor-pin').value;
+  const name = document.getElementById('new-vendedor-name').value.trim();
+  const phone = document.getElementById('new-vendedor-phone').value.trim();
+  const pin = document.getElementById('new-vendedor-pin').value.trim();
   const loteria_ids = Array.from(document.querySelectorAll('.loteria-check:checked')).map(el => el.value);
 
   if (!name || !phone || !pin) { alert('Faltan datos del vendedor'); return; }
+  if (pin.length !== 4) { alert('El PIN debe tener 4 digitos.'); return; }
 
   const res = await fetch(`${API}/users`, {
     method: 'POST',
@@ -770,6 +1178,7 @@ async function registrarMovimiento() {
 // ---------- CLIENTES PREPAGO ----------
 
 async function cargarClientes() {
+  const selectedRecharge = document.getElementById('recharge-client-select')?.value || '';
   const res = await fetch(`${API}/clients`, { headers: authHeaders() });
   if (await handleAuthFailure(res)) return;
   if (!res.ok) return;
@@ -779,7 +1188,7 @@ async function cargarClientes() {
 
   const list = document.getElementById('clients-list');
   list.innerHTML = clients.length ? `<div class="client-grid">${clients.map(client => `
-    <div class="client-card">
+    <div class="client-card ${Number(activeClientHistoryId) === Number(client.id) ? 'active-client' : ''}">
       <div class="client-card-head">
         <div>
           <div class="client-name">${client.name}</div>
@@ -790,12 +1199,16 @@ async function cargarClientes() {
       <div class="list-actions">
         <button class="inline-btn neutral" onclick="seleccionarClienteRecarga(${client.id})">Recargar</button>
         <button class="inline-btn" onclick="cargarMovimientosCliente(${client.id})">Historial</button>
+        <button class="inline-btn danger" onclick="eliminarCliente(${client.id})">Eliminar</button>
       </div>
     </div>
   `).join('')}</div>` : '<span class="sub">Todavia no hay clientes prepago.</span>';
 
   const select = document.getElementById('recharge-client-select');
   select.innerHTML = clients.map(client => `<option value="${client.id}">${client.name} - ${money(client.balance)}</option>`).join('');
+  if (selectedRecharge && clients.some(client => Number(client.id) === Number(selectedRecharge))) {
+    select.value = selectedRecharge;
+  }
 }
 
 async function crearCliente() {
@@ -847,22 +1260,75 @@ async function recargarCliente() {
   cargarMovimientosCliente(clientId);
 }
 
-async function cargarMovimientosCliente(clientId) {
+async function cargarMovimientosCliente(clientId, options = {}) {
+  activeClientHistoryId = clientId;
+  if (!options.quiet) seleccionarClienteRecarga(clientId);
+
+  if (!options.skipClientRefresh) await cargarClientes();
+
+  const target = document.getElementById('client-movements-list');
+  if (!options.quiet) {
+    const client = (window.adminClients || []).find(item => Number(item.id) === Number(clientId));
+    target.innerHTML = `<span class="sub">Cargando historial de ${client?.name || 'cliente'}...</span>`;
+    if (!options.noScroll) target.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   const res = await fetch(`${API}/clients/${clientId}/movements`, { headers: authHeaders() });
   if (await handleAuthFailure(res)) return;
-  if (!res.ok) return;
+  if (!res.ok) {
+    if (!options.quiet) {
+      const err = await readError(res);
+      alert(err.message || 'No se pudo cargar el historial del cliente');
+    }
+    return;
+  }
 
   const movements = await res.json();
   const client = (window.adminClients || []).find(item => Number(item.id) === Number(clientId));
-  document.getElementById('client-movements-list').innerHTML = movements.length ? movements.map(movement => `
+  target.innerHTML = `
     <div class="row">
       <div>
-        <div class="name">${movement.type}</div>
-        <div class="sub">${new Date(movement.created_at).toLocaleString('es-CR', { dateStyle: 'short', timeStyle: 'short' })} · ${movement.user_name || client?.name || ''}</div>
+        <div class="name">${client?.name || 'Cliente'}</div>
+        <div class="sub">Saldo actual ${money(client?.balance || 0)}</div>
+      </div>
+      <span class="pill pending">Historial</span>
+    </div>
+    ${movements.length ? movements.map(movement => {
+      const isCompra = movement.type === 'compra';
+      const detail = isCompra
+        ? `${movement.draw_name || 'Sorteo'}${movement.number_played ? ` · numero ${movement.number_played}` : ''}${movement.prepaid_applied ? ' · descontado' : ''}`
+        : (movement.note || 'Recarga de saldo');
+      return `
+    <div class="row">
+      <div>
+        <div class="name">${isCompra ? 'Compra' : 'Recarga'}</div>
+        <div class="sub">${new Date(movement.created_at).toLocaleString('es-CR', { dateStyle: 'short', timeStyle: 'short' })} · ${movement.user_name || client?.name || ''} · ${detail}</div>
       </div>
       <span style="color:${movement.amount < 0 ? 'var(--coral)' : 'var(--mint)'};">${money(movement.amount)}</span>
     </div>
-  `).join('') : '<span class="sub">Este cliente todavia no tiene movimientos.</span>';
+    `;
+    }).join('') : '<span class="sub">Este cliente todavia no tiene movimientos.</span>'}
+  `;
+}
+
+async function eliminarCliente(clientId) {
+  const client = (window.adminClients || []).find(item => Number(item.id) === Number(clientId));
+  if (!await showAppConfirm(`Eliminar de la lista activa a ${client?.name || 'este cliente'}?\nEl historial de recargas y compras queda guardado.`, 'Eliminar cliente')) return;
+
+  const res = await fetch(`${API}/clients/${clientId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo eliminar el cliente'); return; }
+
+  if (Number(activeClientHistoryId) === Number(clientId)) {
+    activeClientHistoryId = null;
+    document.getElementById('client-movements-list').innerHTML = '<span class="sub">Selecciona un cliente para ver movimientos.</span>';
+  }
+  alert(data.message || 'Cliente eliminado.');
+  cargarClientes();
 }
 
 // ---------- REGLAS ----------

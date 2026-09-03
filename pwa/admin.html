@@ -45,6 +45,7 @@
   .inline-btn { border: 1px solid var(--border); border-radius: 8px; background: rgba(255,182,39,.14); color: var(--amber); font-weight: 800; padding: 8px 10px; cursor: pointer; }
   .inline-btn:disabled { opacity: .45; cursor: not-allowed; }
   .inline-btn.neutral { background: var(--surface-2); color: var(--text); }
+  .inline-btn.danger { background: rgba(255,92,108,0.12); color: var(--coral); }
   .money-positive { color: var(--mint); font-weight: 700; }
   .money-warning { color: var(--amber); font-weight: 700; }
   .money-danger { color: var(--coral); font-weight: 700; }
@@ -65,16 +66,22 @@
   .pill.pending { background: rgba(255,182,39,0.14); color: var(--amber); }
   .pill.paid { background: rgba(0,229,160,0.14); color: var(--mint); }
   .pill.risk { background: rgba(255,92,108,0.16); color: var(--coral); }
+  .pill.off { background: rgba(255,92,108,0.16); color: var(--coral); }
   .draw-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .draw-item:last-child { border-bottom: none; }
   .draw-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-width: 0; }
   .draw-name { font-weight: 600; font-size: 14px; }
   .draw-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .draw-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-top: 10px; }
   .rule-block { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
   .rule-block:first-child { border-top: none; padding-top: 0; margin-top: 0; }
   .rule-title { font-family: 'Archivo Expanded', sans-serif; font-weight: 800; font-size: 15px; text-transform: capitalize; margin-bottom: 12px; }
   .rule-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .rule-fields.three { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .form-grid .full { grid-column: 1 / -1; }
+  .toggle-field { display: flex; align-items: center; gap: 8px; min-height: 44px; margin-bottom: 14px; color: var(--text); font-size: 14px; }
+  .toggle-field input { width: auto; margin: 0; }
   .checklist { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
   .checklist label { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); font-weight: 400; margin-bottom: 0; }
   .checklist input[type=checkbox] { width: auto; margin: 0; }
@@ -84,11 +91,24 @@
   .grid-cell .amt { color: var(--text-dim); font-size: 10px; margin-top: 3px; }
   .grid-cell.risk { background: rgba(255,92,108,0.22); }
   .grid-cell.has-sales { background: rgba(255,182,39,0.14); }
+  .grid-cell.blocked { background: rgba(255,92,108,0.28); border: 1px solid rgba(255,92,108,.42); }
   .numbers-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--text-dim); font-size: 12px; margin-top: 8px; }
   .numbers-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 12px 0; }
   .numbers-stat { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
   .numbers-stat span { display: block; color: var(--text-dim); font-size: 12px; margin-bottom: 4px; }
   .numbers-stat strong { font-size: 20px; }
+  .ticket-result { display: grid; grid-template-columns: 52px 1fr auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); margin-top: 8px; }
+  .ticket-number { height: 42px; border-radius: 10px; display: grid; place-items: center; background: #080A12; color: #fff; font-size: 20px; font-weight: 900; }
+  .ticket-meta { color: var(--text-dim); font-size: 12px; margin-top: 3px; line-height: 1.35; }
+  .ticket-total { text-align: right; font-weight: 900; }
+  .heat-dashboard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+  .heat-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .heat-card-title { display: flex; justify-content: space-between; gap: 10px; font-weight: 800; margin-bottom: 10px; }
+  .heat-row { display: grid; grid-template-columns: 38px 1fr auto; gap: 9px; align-items: center; margin-top: 8px; font-size: 12px; }
+  .heat-num { font-weight: 900; color: var(--text); }
+  .heat-bar { height: 9px; border-radius: 999px; background: rgba(255,255,255,.06); overflow: hidden; }
+  .heat-fill { height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--amber), var(--coral)); }
+  .limit-list { display: grid; gap: 8px; margin-top: 10px; }
   .seller-number-section { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 18px; }
   .seller-number-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
   .seller-number-title { font-weight: 800; font-size: 15px; }
@@ -99,6 +119,7 @@
   .assigned-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .client-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .client-card { background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+  .client-card.active-client { border-color: var(--amber); box-shadow: inset 0 0 0 1px rgba(255,182,39,.28); }
   .client-card-head { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
   .client-name { font-weight: 800; }
   .client-phone { color: var(--text-dim); font-size: 12px; margin-top: 3px; }
@@ -119,12 +140,18 @@
     .grid-99 { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
     .grid-cell { min-height: 48px; padding: 7px 2px; }
     .numbers-summary { grid-template-columns: 1fr; }
+    .ticket-result { grid-template-columns: 46px 1fr; }
+    .ticket-total { grid-column: 2; text-align: left; }
+    .heat-dashboard { grid-template-columns: 1fr; }
     .numbers-toolbar, .seller-number-head { align-items: flex-start; flex-direction: column; }
+    .draw-head { align-items: flex-start; flex-direction: column; }
+    .draw-actions { justify-content: flex-start; }
     .seller-number-totals { justify-content: flex-start; }
     .assigned-list { grid-template-columns: 1fr; }
     .client-grid { grid-template-columns: 1fr; }
     .seller-row-actions { justify-content: flex-start; }
     .metrics-grid, .filter-grid { grid-template-columns: 1fr 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
     .history-item { grid-template-columns: 1fr; gap: 4px; }
     .topbar { align-items: flex-start; flex-direction: column; }
   }
@@ -173,6 +200,40 @@
     </div>
 
     <div class="card">
+      <h3>PREPARAR SORTEOS DEL DÍA</h3>
+      <label>Fecha</label>
+      <input id="generate-draw-date" type="date" />
+      <button class="btn" onclick="generarSorteosDia()">Cargar sorteos del día</button>
+    </div>
+
+    <div class="card" id="edit-draw-card" style="display:none;">
+      <h3>EDITAR SORTEO</h3>
+      <input id="edit-draw-id" type="hidden" />
+      <div class="form-grid">
+        <div>
+          <label>Lotería</label>
+          <select id="edit-draw-loteria"></select>
+        </div>
+        <div>
+          <label>Fecha y hora</label>
+          <input id="edit-draw-datetime" type="datetime-local" />
+        </div>
+        <div>
+          <label>Minutos de corte</label>
+          <input id="edit-draw-cutoff" type="number" min="0" placeholder="15" />
+        </div>
+        <label class="toggle-field">
+          <input id="edit-draw-active" type="checkbox" />
+          <span>Activo para vender</span>
+        </label>
+      </div>
+      <div class="action-row">
+        <button class="btn" onclick="guardarSorteoEditado()">Guardar cambios</button>
+        <button class="btn ghost" onclick="cancelarEditarSorteo()" type="button">Cancelar</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h3>CREAR SORTEO</h3>
       <label>Lotería</label>
       <select id="new-draw-loteria"></select>
@@ -195,6 +256,51 @@
 
   <!-- NUMEROS (cuadricula 00-99) -->
   <div class="panel" id="panel-numeros">
+    <div class="card">
+      <h3>MONITOR EN VIVO POR LOTERÍA</h3>
+      <div id="hot-numbers-dashboard"><span class="sub">Cargando ventas en tiempo real...</span></div>
+    </div>
+
+    <div class="card">
+      <h3>BLOQUEAR O LIMITAR NÚMEROS</h3>
+      <label>Sorteo</label>
+      <select id="limit-draw-select"></select>
+      <div class="form-grid">
+        <div>
+          <label>Números</label>
+          <input id="limit-numbers" type="text" placeholder="45,12,08" />
+        </div>
+        <div>
+          <label>Límite por número</label>
+          <input id="limit-amount" type="number" min="0" placeholder="0 = solo bloquear si marcas el check" />
+        </div>
+        <label class="toggle-field full">
+          <input id="limit-blocked" type="checkbox" />
+          <span>Bloquear completamente</span>
+        </label>
+      </div>
+      <button class="btn" onclick="guardarLimitesNumeros()">Guardar bloqueo o límite</button>
+      <div id="number-limits-list" class="limit-list"><span class="sub">Selecciona un sorteo.</span></div>
+    </div>
+
+    <div class="card">
+      <h3>BUSCAR TIQUETES POR NÚMERO</h3>
+      <div class="form-grid">
+        <div>
+          <label>Número</label>
+          <input id="ticket-search-number" type="text" maxlength="2" inputmode="numeric" placeholder="45" />
+        </div>
+        <div>
+          <label>Sorteo</label>
+          <select id="ticket-search-draw-select">
+            <option value="">Todos los sorteos</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" onclick="buscarTiquetesPorNumero()">Buscar tiquetes</button>
+      <div id="ticket-search-results" style="margin-top:12px;"><span class="sub">Escribe un número para buscar tiquetes y ventas.</span></div>
+    </div>
+
     <div class="card">
       <h3>VENTAS POR NÚMERO</h3>
       <label>Sorteo</label>
@@ -398,7 +504,7 @@
 </div>
 
 <script src="ui.js?v=2"></script>
-<script src="admin.js?v=15"></script>
+<script src="admin.js?v=23"></script>
 <script>
   document.querySelectorAll('.tab').forEach(tab => {
     tab.addEventListener('click', () => {

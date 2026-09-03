@@ -41,16 +41,29 @@ class CloseDrawJob implements ShouldQueue
             $this->pagarPremioSiAplica($venta, $draw, $rule);
         }
 
-        // Comision sobre todas las ventas del sorteo, ganadoras o no.
-        $salesByUser = $ventas->groupBy('user_id');
-        foreach ($salesByUser as $userId => $userSales) {
-            Transaction::create([
-                'tenant_id' => $draw->tenant_id,
-                'user_id' => $userId,
-                'draw_id' => $draw->id,
-                'type' => 'comision',
-                'amount' => $userSales->sum(fn (Transaction $sale) => $sale->amount + $sale->addon_amount) * ($rule->commission_pct / 100),
-            ]);
+        // Las comisiones se generan al momento de vender para que el vendedor
+        // las vea en tiempo real. En el cierre solo se rellenan ventas antiguas
+        // que no tengan comision asociada.
+        foreach ($ventas as $venta) {
+            $yaTieneComision = Transaction::where('type', 'comision')
+                ->where('draw_id', $draw->id)
+                ->where('user_id', $venta->user_id)
+                ->where('metadata->sale_transaction_id', $venta->id)
+                ->exists();
+
+            if (! $yaTieneComision && $rule->commission_pct > 0) {
+                Transaction::create([
+                    'tenant_id' => $draw->tenant_id,
+                    'user_id' => $venta->user_id,
+                    'draw_id' => $draw->id,
+                    'type' => 'comision',
+                    'amount' => ((float) $venta->amount + (float) $venta->addon_amount) * ((float) $rule->commission_pct / 100),
+                    'metadata' => [
+                        'sale_transaction_id' => $venta->id,
+                        'commission_pct' => (float) $rule->commission_pct,
+                    ],
+                ]);
+            }
         }
 
         $draw->update(['status' => 'pagado']);

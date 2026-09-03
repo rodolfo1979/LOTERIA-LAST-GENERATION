@@ -9,9 +9,13 @@ class User extends Authenticatable
 {
     use HasApiTokens;
 
-    protected $fillable = ['tenant_id', 'name', 'phone', 'role', 'pin_hash'];
+    protected $fillable = ['tenant_id', 'name', 'phone', 'role', 'active', 'pin_hash'];
 
     protected $hidden = ['pin_hash'];
+
+    protected $casts = [
+        'active' => 'boolean',
+    ];
 
     public function tenant()
     {

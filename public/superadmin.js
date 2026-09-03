@@ -81,10 +81,43 @@ async function cargarTenants() {
       <div>
         <div class="name">${t.name}</div>
         <div class="sub">${t.plan?.name || 'sin plan'} · ${t.vendedores_count}/${t.plan?.max_vendedores ?? '∞'} vendedores</div>
+        <div class="sub">Admins: ${(t.users || []).map(u => `${u.name} (${u.phone})`).join(', ') || 'sin admin'}</div>
       </div>
-      <span class="pill ${t.status}">${t.status}</span>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+        <span class="pill ${t.status}">${t.status}</span>
+        ${(t.users || []).map(u => `<button class="btn small ghost" onclick="resetearPinTenantAdmin(${t.id}, ${u.id}, '${jsArg(u.name)}')">Reset PIN admin</button>`).join('')}
+      </div>
     </div>
   `).join('') : '<span class="sub">No hay tenants todavía.</span>';
+}
+
+function jsArg(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function resetearPinTenantAdmin(tenantId, userId, name) {
+  const pin = prompt(`Nuevo PIN de 4 digitos para ${name}`);
+  if (pin === null) return;
+  if (!/^\d{4}$/.test(pin)) {
+    alert('El PIN debe tener exactamente 4 digitos.');
+    return;
+  }
+
+  const confirmar = window.showAppConfirm
+    ? await showAppConfirm(`Resetear PIN de ${name}?`, 'Reset PIN admin')
+    : window.confirm(`Resetear PIN de ${name}?`);
+  if (!confirmar) return;
+
+  const res = await fetch(`${API}/superadmin/tenants/${tenantId}/admin-pin`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ user_id: userId, pin }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo resetear el PIN del admin'); return; }
+
+  alert(data.message || `PIN actualizado para ${name}.`);
 }
 
 async function crearTenant() {

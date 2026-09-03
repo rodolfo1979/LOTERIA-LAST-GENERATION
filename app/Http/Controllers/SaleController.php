@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Draw;
+use App\Models\DrawNumberLimit;
 use App\Models\Client;
 use App\Models\ClientMovement;
 use App\Models\TenantRule;
@@ -73,22 +74,33 @@ class SaleController extends Controller
         $rule = TenantRule::where('tenant_id', $draw->tenant_id)
             ->where('game_type', $draw->game_type)
             ->first();
+        $numberLimit = DrawNumberLimit::where('draw_id', $draw->id)
+            ->where('number_played', $data['number_played'])
+            ->first();
 
         // Bloqueo automatico: si este numero ya llego al tope, se rechaza sin
         // que nadie tenga que estar viendo la pantalla para cerrarlo a mano.
         // Se envuelve en una transaccion con lock para evitar que dos ventas
         // simultaneas se cuelen justo en el limite (condicion de carrera).
-        if ($rule && $rule->max_bet_per_number) {
-            $transaction = DB::transaction(function () use ($request, $draw, $rule, $data, $client, $totalVenta) {
+        if (($rule && $rule->max_bet_per_number) || $numberLimit) {
+            $transaction = DB::transaction(function () use ($request, $draw, $rule, $numberLimit, $data, $client, $totalVenta) {
+                if ($numberLimit?->blocked) {
+                    return ['error' => true, 'blocked' => true, 'disponible' => 0];
+                }
+
                 $vendidoActual = Transaction::where('draw_id', $draw->id)
                     ->where('number_played', $data['number_played'])
                     ->where('type', 'venta')
                     ->lockForUpdate()
                     ->sum('amount');
 
-                $disponible = $rule->max_bet_per_number - $vendidoActual;
+                $maximos = collect([$rule?->max_bet_per_number, $numberLimit?->max_amount])
+                    ->filter(fn ($value) => $value !== null && (float) $value > 0)
+                    ->map(fn ($value) => (float) $value);
+                $maximoAplicado = $maximos->isNotEmpty() ? $maximos->min() : null;
+                $disponible = $maximoAplicado !== null ? $maximoAplicado - $vendidoActual : null;
 
-                if ($data['amount'] > $disponible) {
+                if ($disponible !== null && $data['amount'] > $disponible) {
                     return ['error' => true, 'disponible' => max($disponible, 0)];
                 }
 
@@ -121,14 +133,18 @@ class SaleController extends Controller
                     ]);
                 }
 
+                $this->crearComisionDeVenta($sale, $draw, $rule);
+
                 return ['error' => false, 'transaction' => $sale->load('client:id,name,phone')];
             });
 
             if ($transaction['error']) {
                 return response()->json([
-                    'message' => $transaction['disponible'] > 0
+                    'message' => ($transaction['blocked'] ?? false)
+                        ? 'Ese numero esta bloqueado para este sorteo.'
+                        : ($transaction['disponible'] > 0
                         ? "Ese numero ya casi llega al limite. Cupo disponible: ₡{$transaction['disponible']}."
-                        : 'Ese numero ya llego al limite de ventas. Elegi otro numero.',
+                        : 'Ese numero ya llego al limite de ventas. Elegi otro numero.'),
                     'disponible' => $transaction['disponible'],
                 ], 422);
             }
@@ -167,9 +183,36 @@ class SaleController extends Controller
                 ]);
             }
 
+            $this->crearComisionDeVenta($sale, $draw, $rule);
+
             return $sale->load('client:id,name,phone');
         });
 
         return response()->json($transaction, 201);
+    }
+
+    protected function crearComisionDeVenta(Transaction $sale, Draw $draw, ?TenantRule $rule): void
+    {
+        if (! $rule || $rule->commission_pct <= 0) {
+            return;
+        }
+
+        $montoComision = ((float) $sale->amount + (float) $sale->addon_amount) * ((float) $rule->commission_pct / 100);
+
+        if ($montoComision <= 0) {
+            return;
+        }
+
+        Transaction::create([
+            'tenant_id' => $draw->tenant_id,
+            'user_id' => $sale->user_id,
+            'draw_id' => $draw->id,
+            'type' => 'comision',
+            'amount' => $montoComision,
+            'metadata' => [
+                'sale_transaction_id' => $sale->id,
+                'commission_pct' => (float) $rule->commission_pct,
+            ],
+        ]);
     }
 }

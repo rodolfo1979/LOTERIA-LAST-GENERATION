@@ -33,6 +33,12 @@ class AuthController extends Controller
             ]);
         }
 
+        if (! $user->active) {
+            throw ValidationException::withMessages([
+                'phone' => ['Este usuario esta desactivado. Consulta con el administrador.'],
+            ]);
+        }
+
         $token = $user->createToken('vendedor-app')->plainTextToken;
 
         return response()->json([

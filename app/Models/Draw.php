@@ -9,11 +9,12 @@ class Draw extends Model
 {
     protected $fillable = [
         'tenant_id', 'loteria_id', 'game_type', 'name', 'draw_datetime',
-        'cutoff_minutes', 'status', 'winning_number', 'winning_number_addon',
+        'cutoff_minutes', 'status', 'is_active', 'winning_number', 'winning_number_addon',
     ];
 
     protected $casts = [
         'draw_datetime' => 'datetime',
+        'is_active' => 'boolean',
     ];
 
     public function loteria()
@@ -31,6 +32,11 @@ class Draw extends Model
         return $this->hasMany(Transaction::class);
     }
 
+    public function numberLimits()
+    {
+        return $this->hasMany(DrawNumberLimit::class);
+    }
+
     // Hora exacta despues de la cual ya no se aceptan ventas.
     public function cutoffAt(): Carbon
     {
@@ -39,6 +45,6 @@ class Draw extends Model
 
     public function isOpenForSales(): bool
     {
-        return $this->status === 'abierto' && now()->lt($this->cutoffAt());
+        return $this->is_active && $this->status === 'abierto' && now()->lt($this->cutoffAt());
     }
 }

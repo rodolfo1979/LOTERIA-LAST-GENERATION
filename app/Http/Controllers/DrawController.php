@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Jobs\CloseDrawJob;
 use App\Models\Draw;
+use App\Models\DrawNumberLimit;
 use App\Models\Loteria;
 use App\Models\TenantRule;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 class DrawController extends Controller
 {
@@ -30,7 +32,9 @@ class DrawController extends Controller
                 'draw_datetime' => $draw->draw_datetime,
                 'cutoff_minutes' => $draw->cutoff_minutes,
                 'status' => $draw->status,
+                'is_active' => $draw->is_active,
                 'is_open_for_sales' => $draw->isOpenForSales(),
+                'sales_count' => $draw->transactions()->where('type', 'venta')->count(),
                 'winning_number' => $draw->winning_number,
                 'winning_number_addon' => $draw->winning_number_addon,
             ]);
@@ -64,9 +68,157 @@ class DrawController extends Controller
             'draw_datetime' => $data['draw_datetime'],
             'cutoff_minutes' => $data['cutoff_minutes'] ?? 15,
             'status' => 'abierto',
+            'is_active' => true,
         ]);
 
         return response()->json($draw, 201);
+    }
+
+    public function update(Request $request, Draw $draw)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $draw->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        if ($draw->status !== 'abierto') {
+            return response()->json([
+                'message' => 'Solo se pueden editar sorteos abiertos.',
+            ], 422);
+        }
+
+        $data = $request->validate([
+            'loteria_id' => ['required', 'exists:loterias,id'],
+            'draw_datetime' => ['required', 'date'],
+            'cutoff_minutes' => ['required', 'integer', 'min:0'],
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $hasSales = $draw->transactions()->where('type', 'venta')->exists();
+        if ($hasSales && (int) $data['loteria_id'] !== (int) $draw->loteria_id) {
+            return response()->json([
+                'message' => 'Este sorteo ya tiene ventas. No se puede cambiar la loteria, solo fecha, hora, corte o activacion.',
+            ], 422);
+        }
+
+        $loteria = Loteria::where('tenant_id', $request->user()->tenant_id)
+            ->findOrFail($data['loteria_id']);
+
+        $draw->update([
+            'loteria_id' => $loteria->id,
+            'name' => $loteria->name,
+            'game_type' => $loteria->game_type,
+            'draw_datetime' => $data['draw_datetime'],
+            'cutoff_minutes' => $data['cutoff_minutes'],
+            'is_active' => (bool) $data['is_active'],
+        ]);
+
+        return response()->json([
+            'message' => 'Sorteo actualizado.',
+            'draw' => $draw->fresh(),
+        ]);
+    }
+
+    public function generateDay(Request $request)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno'])) {
+            abort(403, 'Solo el admin puede preparar sorteos.');
+        }
+
+        $data = $request->validate([
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        $date = Carbon::createFromFormat('Y-m-d', $data['date'])->startOfDay();
+        $created = collect();
+        $existing = collect();
+        $withoutSchedule = collect();
+
+        $loterias = Loteria::where('tenant_id', $request->user()->tenant_id)
+            ->where('active', true)
+            ->orderBy('name')
+            ->get();
+
+        foreach ($loterias as $loteria) {
+            $baseDraw = Draw::where('tenant_id', $request->user()->tenant_id)
+                ->where('loteria_id', $loteria->id)
+                ->latest('draw_datetime')
+                ->first();
+
+            if (! $baseDraw) {
+                $withoutSchedule->push($loteria->name);
+                continue;
+            }
+
+            $drawDateTime = $date->copy()->setTimeFrom($baseDraw->draw_datetime);
+            $draw = Draw::where('tenant_id', $request->user()->tenant_id)
+                ->where('loteria_id', $loteria->id)
+                ->where('draw_datetime', $drawDateTime)
+                ->first();
+
+            if ($draw) {
+                $existing->push($draw);
+                continue;
+            }
+
+            $created->push(Draw::create([
+                'tenant_id' => $request->user()->tenant_id,
+                'loteria_id' => $loteria->id,
+                'name' => $loteria->name,
+                'game_type' => $loteria->game_type,
+                'draw_datetime' => $drawDateTime,
+                'cutoff_minutes' => $baseDraw->cutoff_minutes,
+                'status' => 'abierto',
+                'is_active' => true,
+            ]));
+        }
+
+        return response()->json([
+            'message' => 'Sorteos del dia preparados.',
+            'created_count' => $created->count(),
+            'existing_count' => $existing->count(),
+            'without_schedule' => $withoutSchedule->values(),
+        ]);
+    }
+
+    public function setActive(Request $request, Draw $draw)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $draw->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'is_active' => ['required', 'boolean'],
+        ]);
+
+        $draw->update(['is_active' => (bool) $data['is_active']]);
+
+        return response()->json([
+            'message' => $draw->is_active ? 'Sorteo activado.' : 'Sorteo desactivado.',
+            'draw' => $draw,
+        ]);
+    }
+
+    public function destroy(Request $request, Draw $draw)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $draw->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        if ($draw->transactions()->exists()) {
+            $draw->update(['is_active' => false]);
+
+            return response()->json([
+                'message' => 'El sorteo ya tiene movimientos. Se desactivo para proteger el historial.',
+                'deleted' => false,
+            ]);
+        }
+
+        $draw->delete();
+
+        return response()->json([
+            'message' => 'Sorteo eliminado.',
+            'deleted' => true,
+        ]);
     }
 
     public function close(Request $request, Draw $draw)
@@ -105,6 +257,10 @@ class DrawController extends Controller
             ->get()
             ->keyBy('number_played');
 
+        $limits = DrawNumberLimit::where('draw_id', $draw->id)
+            ->get()
+            ->keyBy('number_played');
+
         $ventasPorVendedor = Transaction::where('draw_id', $draw->id)
             ->where('type', 'venta')
             ->selectRaw('user_id, number_played, SUM(amount) as total, SUM(addon_amount) as addon_total, COUNT(*) as tickets')
@@ -122,8 +278,10 @@ class DrawController extends Controller
             for ($i = 0; $i <= 99; $i++) {
                 $num = str_pad($i, 2, '0', STR_PAD_LEFT);
                 $fila = $vendido->get($num);
+                $limit = $limits->get($num);
                 $total = $fila->total ?? 0;
                 $addonTotal = $fila->addon_total ?? 0;
+                $effectiveMax = $limit?->max_amount ?? $maxPorNumero;
 
                 $numeros[] = [
                     'numero' => $num,
@@ -131,7 +289,10 @@ class DrawController extends Controller
                     'addon_total' => (float) $addonTotal,
                     'grand_total' => (float) $total + (float) $addonTotal,
                     'tickets' => $fila->tickets ?? 0,
-                    'en_riesgo' => $maxPorNumero && $total >= $maxPorNumero,
+                    'limit_amount' => $limit?->max_amount !== null ? (float) $limit->max_amount : null,
+                    'blocked' => (bool) ($limit?->blocked ?? false),
+                    'available' => $effectiveMax !== null ? max((float) $effectiveMax - (float) $total, 0) : null,
+                    'en_riesgo' => $limit?->blocked || ($effectiveMax && $total >= $effectiveMax),
                 ];
             }
         } else {
@@ -141,7 +302,12 @@ class DrawController extends Controller
                 'addon_total' => (float) $fila->addon_total,
                 'grand_total' => (float) $fila->total + (float) $fila->addon_total,
                 'tickets' => $fila->tickets,
-                'en_riesgo' => $maxPorNumero && $fila->total >= $maxPorNumero,
+                'limit_amount' => $limits->get($fila->number_played)?->max_amount !== null ? (float) $limits->get($fila->number_played)->max_amount : null,
+                'blocked' => (bool) ($limits->get($fila->number_played)?->blocked ?? false),
+                'available' => ($limits->get($fila->number_played)?->max_amount ?? $maxPorNumero) !== null
+                    ? max((float) ($limits->get($fila->number_played)?->max_amount ?? $maxPorNumero) - (float) $fila->total, 0)
+                    : null,
+                'en_riesgo' => $limits->get($fila->number_played)?->blocked || (($limits->get($fila->number_played)?->max_amount ?? $maxPorNumero) && $fila->total >= ($limits->get($fila->number_played)?->max_amount ?? $maxPorNumero)),
             ])->values();
         }
 
@@ -200,6 +366,68 @@ class DrawController extends Controller
             'max_por_numero' => $maxPorNumero,
             'numeros' => $numeros,
             'seller_breakdown' => $sellerBreakdown,
+            'limits' => $limits->values()->map(fn (DrawNumberLimit $limit) => [
+                'id' => $limit->id,
+                'number_played' => $limit->number_played,
+                'max_amount' => $limit->max_amount !== null ? (float) $limit->max_amount : null,
+                'blocked' => $limit->blocked,
+                'note' => $limit->note,
+            ]),
+        ]);
+    }
+
+    public function limits(Request $request, Draw $draw)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $draw->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        return $draw->numberLimits()
+            ->orderBy('number_played')
+            ->get();
+    }
+
+    public function saveLimits(Request $request, Draw $draw)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $draw->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        $data = $request->validate([
+            'numbers' => ['required', 'array', 'min:1'],
+            'numbers.*' => ['required', 'string', 'regex:/^\d{2}$/'],
+            'max_amount' => ['nullable', 'numeric', 'min:0'],
+            'blocked' => ['sometimes', 'boolean'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        foreach (array_unique($data['numbers']) as $number) {
+            DrawNumberLimit::updateOrCreate(
+                ['draw_id' => $draw->id, 'number_played' => $number],
+                [
+                    'tenant_id' => $request->user()->tenant_id,
+                    'max_amount' => $data['max_amount'] ?? null,
+                    'blocked' => (bool) ($data['blocked'] ?? false),
+                    'note' => $data['note'] ?? null,
+                ]
+            );
+        }
+
+        return response()->json([
+            'message' => 'Limites de numeros actualizados.',
+        ]);
+    }
+
+    public function deleteLimit(Request $request, Draw $draw, string $number)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno']) || $draw->tenant_id !== $request->user()->tenant_id) {
+            abort(403);
+        }
+
+        $draw->numberLimits()->where('number_played', $number)->delete();
+
+        return response()->json([
+            'message' => 'Limite eliminado.',
         ]);
     }
 }

@@ -23,6 +23,7 @@ class UserController extends Controller
                 'id' => $v->id,
                 'name' => $v->name,
                 'phone' => $v->phone,
+                'active' => (bool) $v->active,
                 'balance' => $v->balance(),
                 'loterias' => $v->loterias->map(fn ($loteria) => [
                     'id' => $loteria->id,
@@ -52,6 +53,16 @@ class UserController extends Controller
             'pin' => ['required', 'string', 'size:4'],
             'loteria_ids' => ['sometimes', 'array'],
             'loteria_ids.*' => ['integer', 'exists:loterias,id'],
+        ], [
+            'name.required' => 'Falta el nombre del vendedor.',
+            'name.max' => 'El nombre del vendedor no puede tener mas de 100 caracteres.',
+            'phone.required' => 'Falta el telefono del vendedor.',
+            'phone.unique' => 'Ese telefono ya esta registrado. Usa otro numero o revisa si el vendedor ya existe.',
+            'pin.required' => 'Falta el PIN del vendedor.',
+            'pin.size' => 'El PIN debe tener 4 digitos.',
+            'loteria_ids.array' => 'La seleccion de loterias no es valida.',
+            'loteria_ids.*.integer' => 'Una de las loterias seleccionadas no es valida.',
+            'loteria_ids.*.exists' => 'Una de las loterias seleccionadas no existe.',
         ]);
 
         $vendedor = User::create([
@@ -59,6 +70,7 @@ class UserController extends Controller
             'name' => $data['name'],
             'phone' => $data['phone'],
             'role' => 'vendedor',
+            'active' => true,
             'pin_hash' => Hash::make($data['pin']),
         ]);
 
@@ -91,5 +103,72 @@ class UserController extends Controller
         $user->loterias()->sync($loteriaIds);
 
         return response()->json($user->load('loterias:id,name'));
+    }
+
+    public function resetPin(Request $request, User $user)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno'])
+            || $user->tenant_id !== $request->user()->tenant_id
+            || $user->role !== 'vendedor') {
+            abort(403, 'Solo el admin puede resetear PIN de vendedores de su negocio.');
+        }
+
+        $data = $request->validate([
+            'pin' => ['required', 'string', 'regex:/^\d{4}$/'],
+        ], [
+            'pin.required' => 'Falta el nuevo PIN.',
+            'pin.regex' => 'El PIN debe tener exactamente 4 digitos.',
+        ]);
+
+        $user->forceFill([
+            'pin_hash' => Hash::make($data['pin']),
+        ])->save();
+
+        $user->tokens()->delete();
+
+        return response()->json([
+            'message' => "PIN actualizado para {$user->name}.",
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'phone' => $user->phone,
+            ],
+        ]);
+    }
+
+    public function setActive(Request $request, User $user)
+    {
+        if (! in_array($request->user()->role, ['admin', 'dueno'])
+            || $user->tenant_id !== $request->user()->tenant_id
+            || $user->role !== 'vendedor') {
+            abort(403, 'Solo el admin puede activar o desactivar vendedores de su negocio.');
+        }
+
+        $data = $request->validate([
+            'active' => ['required', 'boolean'],
+        ]);
+
+        $user->update(['active' => (bool) $data['active']]);
+
+        if (! $user->active) {
+            $user->tokens()->delete();
+        }
+
+        return response()->json([
+            'message' => $user->active ? 'Vendedor activado.' : 'Vendedor desactivado.',
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'phone' => $user->phone,
+                'active' => (bool) $user->active,
+            ],
+        ]);
+    }
+
+    public function destroy(Request $request, User $user)
+    {
+        $request->merge(['active' => false]);
+
+        return $this->setActive($request, $user);
     }
 }

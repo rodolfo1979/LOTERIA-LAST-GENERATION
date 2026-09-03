@@ -16,6 +16,7 @@ class TenantController extends Controller
         $this->assertSuperAdmin($request);
 
         return Tenant::with('plan:id,name,max_vendedores,price_monthly')
+            ->with(['users' => fn ($q) => $q->whereIn('role', ['admin', 'dueno'])->select('id', 'tenant_id', 'name', 'phone', 'role', 'active')])
             ->withCount(['users as vendedores_count' => fn ($q) => $q->where('role', 'vendedor')])
             ->get();
     }
@@ -69,6 +70,40 @@ class TenantController extends Controller
         $tenant->update($data);
 
         return response()->json($tenant->load('plan'));
+    }
+
+    public function resetAdminPin(Request $request, Tenant $tenant)
+    {
+        $this->assertSuperAdmin($request);
+
+        $data = $request->validate([
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'pin' => ['required', 'string', 'regex:/^\d{4}$/'],
+        ], [
+            'user_id.required' => 'Selecciona el administrador del tenant.',
+            'pin.required' => 'Falta el nuevo PIN.',
+            'pin.regex' => 'El PIN debe tener exactamente 4 digitos.',
+        ]);
+
+        $admin = User::where('tenant_id', $tenant->id)
+            ->whereIn('role', ['admin', 'dueno'])
+            ->findOrFail($data['user_id']);
+
+        $admin->forceFill([
+            'pin_hash' => Hash::make($data['pin']),
+        ])->save();
+
+        $admin->tokens()->delete();
+
+        return response()->json([
+            'message' => "PIN actualizado para {$admin->name}.",
+            'admin' => [
+                'id' => $admin->id,
+                'name' => $admin->name,
+                'phone' => $admin->phone,
+                'role' => $admin->role,
+            ],
+        ]);
     }
 
     protected function assertSuperAdmin(Request $request): void

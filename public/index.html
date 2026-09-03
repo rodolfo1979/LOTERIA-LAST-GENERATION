@@ -8,16 +8,17 @@
   <meta name="theme-color" content="#101820" />
   <style>
     :root {
-      --bg: #eef2f5;
-      --ink: #111827;
-      --muted: #667085;
-      --panel: #ffffff;
-      --line: #d8dee8;
+      --bg: #0A0A0F;
+      --ink: #F5F5F7;
+      --muted: #9EA0AD;
+      --panel: #14141C;
+      --panel-2: #1D1D28;
+      --line: #2A2A38;
       --brand: #101820;
-      --gold: #d9a441;
-      --ok: #087f5b;
-      --danger: #b42318;
-      --shadow: 0 14px 40px rgba(16, 24, 40, .08);
+      --gold: #FFB627;
+      --ok: #00A979;
+      --danger: #FF5C6C;
+      --shadow: 0 18px 60px rgba(0, 0, 0, .24);
     }
 
     html { width: 100%; overflow-x: hidden; }
@@ -26,7 +27,9 @@
       width: 100%;
       min-width: 0;
       margin: 0;
-      background: var(--bg);
+      background:
+        linear-gradient(180deg, rgba(255,182,39,.08), transparent 220px),
+        var(--bg);
       color: var(--ink);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       overflow-x: hidden;
@@ -41,8 +44,8 @@
       place-items: center;
       padding: 20px;
       background:
-        linear-gradient(135deg, rgba(217,164,65,.18), transparent 38%),
-        radial-gradient(circle at 80% 20%, rgba(16,24,32,.14), transparent 28%),
+        linear-gradient(135deg, rgba(255,182,39,.16), transparent 38%),
+        linear-gradient(180deg, rgba(255,255,255,.04), transparent),
         var(--bg);
     }
 
@@ -64,31 +67,35 @@
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fbfcfe;
+      background: var(--panel-2);
       color: var(--ink);
       padding: 14px 15px;
       font-size: 18px;
       outline: none;
     }
-    input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(217,164,65,.18); }
+    input:focus, select:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,182,39,.18); }
 
     .field-stack { display: grid; gap: 14px; }
     .btn {
       border: none;
       border-radius: 8px;
-      background: var(--brand);
+      background: #070910;
       color: white;
       padding: 14px 16px;
       font-weight: 800;
       min-height: 50px;
     }
-    .btn.gold { background: var(--gold); color: #1f1604; }
-    .btn.ghost { background: #f4f6f8; color: var(--ink); border: 1px solid var(--line); }
+    .btn.gold { background: linear-gradient(135deg, var(--gold), #FF8A00); color: #14141C; }
+    .btn.ghost { background: var(--panel-2); color: var(--ink); border: 1px solid var(--line); }
+    .btn.danger { background: rgba(255,92,108,.12); color: #FFB8C0; border: 1px solid rgba(255,92,108,.35); }
     .btn.small { min-height: 34px; padding: 8px 11px; font-size: 12px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
 
     .app-shell { min-height: 100vh; display: none; grid-template-rows: auto 1fr; }
     .topbar {
-      background: var(--brand);
+      background: rgba(10, 10, 15, .92);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
       color: white;
       padding: 14px 18px;
       display: flex;
@@ -108,65 +115,76 @@
       display: none;
       margin: 12px 18px 0;
       border-radius: 8px;
-      background: #fff4d6;
-      color: #7a4d00;
-      border: 1px solid #f4cf78;
+      background: rgba(255,182,39,.14);
+      color: var(--gold);
+      border: 1px solid rgba(255,182,39,.3);
       padding: 10px 12px;
       font-size: 13px;
       font-weight: 700;
     }
 
     .workbench {
-      width: min(1280px, calc(100vw - 36px));
+      width: min(1240px, calc(100vw - 32px));
       margin: 0 auto;
-      padding: 16px 18px 24px;
+      padding: 18px 16px 28px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);
-      gap: 16px;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 360px);
+      gap: 18px;
     }
+    .workbench > section, .side-rail { min-width: 0; }
+    .side-rail { display: grid; gap: 14px; align-content: start; }
 
     .panel {
       min-width: 0;
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: 0 1px 2px rgba(16,24,40,.04);
+      border-radius: 12px;
+      box-shadow: 0 12px 38px rgba(0,0,0,.18);
+      overflow: hidden;
+    }
+    .sale-panel {
+      margin-top: 14px;
+      border-color: rgba(255,182,39,.32);
+      box-shadow: 0 18px 50px rgba(0,0,0,.26), 0 0 0 1px rgba(255,182,39,.05);
     }
     .panel-head {
-      padding: 15px 16px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--line);
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      background: rgba(255,255,255,.025);
     }
-    .panel-title { margin: 0; font-size: 14px; font-weight: 900; text-transform: uppercase; color: #344054; }
-    .panel-body { padding: 16px; }
+    .panel-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+    .panel-title { margin: 0; font-size: 14px; font-weight: 900; text-transform: uppercase; color: #DADCE5; }
+    .panel-body { padding: 14px; }
 
     .draws { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip {
       border: 1px solid var(--line);
-      background: #f8fafc;
+      background: var(--panel-2);
       border-radius: 999px;
       padding: 10px 13px;
       font-size: 13px;
       font-weight: 800;
-      color: #344054;
+      color: #DADCE5;
     }
-    .chip.active { background: var(--brand); border-color: var(--brand); color: white; }
+    .chip.active { background: linear-gradient(135deg, var(--gold), #FF8A00); border-color: transparent; color: #14141C; }
 
-    .sale-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .sale-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .sale-grid .full { grid-column: 1 / -1; }
     .money-field, .number-field {
-      min-height: 96px;
+      min-height: 86px;
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px;
-      background: #fbfcfe;
+      background: var(--panel-2);
     }
     .money-field.active, .number-field.active {
       border-color: var(--gold);
-      box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(217,164,65,.14);
+      box-shadow: inset 0 0 0 1px var(--gold), 0 0 0 3px rgba(255,182,39,.14);
+      background: #222231;
     }
     .field-label { color: var(--muted); font-size: 12px; font-weight: 800; margin-bottom: 10px; }
     .field-value {
@@ -177,12 +195,15 @@
       box-shadow: none;
       padding: 0;
       min-height: 36px;
-      font-size: 30px;
+      font-size: 28px;
       font-weight: 900;
       text-align: right;
+      color: var(--ink);
     }
     .field-value:focus { box-shadow: none; border-color: transparent; }
     .number-field .field-value { text-align: center; letter-spacing: 4px; }
+    .number-field .field-value::placeholder,
+    .money-field .field-value::placeholder { color: rgba(245,245,247,.35); }
 
     .toggle-row {
       display: grid;
@@ -192,52 +213,87 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px;
-      background: #fbfcfe;
+      background: var(--panel-2);
     }
     .toggle-row input { width: 20px; height: 20px; margin: 0; }
     .toggle-title { display: block; font-size: 14px; font-weight: 900; color: var(--ink); }
     .toggle-copy { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
     .client-box {
       display: grid;
-      gap: 10px;
+      gap: 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
       padding: 12px;
-      background: #fbfcfe;
+      background: var(--panel-2);
     }
     .client-line { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 800; }
     .client-warning {
       display: none;
-      border: 1px solid #f4cf78;
-      background: #fff8e8;
-      color: #7a4d00;
+      border: 1px solid rgba(255,182,39,.36);
+      background: rgba(255,182,39,.12);
+      color: var(--gold);
       border-radius: 8px;
       padding: 10px;
       font-size: 13px;
       font-weight: 800;
     }
+    .batch-box {
+      display: grid;
+      gap: 9px;
+      border: 1px solid rgba(255,182,39,.25);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255,182,39,.07);
+    }
+    .batch-box textarea {
+      width: 100%;
+      min-height: 68px;
+      resize: vertical;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--ink);
+      padding: 12px;
+      font: inherit;
+      font-size: 16px;
+      outline: none;
+    }
+    .batch-box textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255,182,39,.14); }
+    .batch-actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+    .batch-preview { color: var(--muted); font-size: 12px; font-weight: 800; min-width: 0; overflow-wrap: anywhere; }
 
-    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-    .summary-box { border-radius: 8px; background: #f5f7fa; border: 1px solid var(--line); padding: 12px; }
+    .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+    .summary-box { border-radius: 8px; background: rgba(255,255,255,.035); border: 1px solid var(--line); padding: 10px; }
     .summary-box strong { display: block; font-size: 18px; margin-top: 3px; }
+    .summary-box:last-child { border-color: rgba(255,182,39,.45); background: rgba(255,182,39,.09); }
+    .summary-box:last-child strong { color: var(--gold); }
 
     .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .key {
-      min-height: 58px;
+      min-height: 54px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #f8fafc;
+      background: var(--panel-2);
       color: var(--ink);
       font-size: 22px;
       font-weight: 900;
     }
-    .key:active { transform: translateY(1px); background: #edf1f5; }
-    .key.action { font-size: 15px; background: #f1f4f7; color: #344054; }
+    .key:active { transform: translateY(1px); background: rgba(255,182,39,.12); border-color: rgba(255,182,39,.45); }
+    .key.action { font-size: 15px; background: #252532; color: #DADCE5; }
     .key.submit { grid-column: 1 / -1; background: var(--ok); color: white; border-color: var(--ok); }
+    .key.submit:active { background: #008F67; }
     .quick-amounts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
-    .quick { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font-weight: 800; color: #344054; }
+    .quick { min-height: 40px; border: 1px solid var(--line); border-radius: 8px; background: #252532; font-weight: 800; color: #DADCE5; }
+    .mobile-keypad-panel {
+      display: none;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #171721;
+      overflow: hidden;
+    }
 
-    .sales-list { display: grid; gap: 8px; max-height: 390px; overflow: auto; }
+    .sales-list { display: grid; gap: 8px; max-height: 320px; overflow: auto; }
+    .ticket-list { max-height: 260px; }
     .sale-row {
       display: grid;
       grid-template-columns: 54px 1fr auto;
@@ -246,25 +302,54 @@
       padding: 10px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fbfcfe;
+      background: var(--panel-2);
     }
     .sale-num {
       height: 42px;
       border-radius: 8px;
       display: grid;
       place-items: center;
-      background: var(--brand);
+      background: #080A12;
       color: white;
       font-size: 20px;
       font-weight: 900;
     }
     .sale-detail { color: var(--muted); font-size: 12px; line-height: 1.35; }
     .sale-total { font-size: 16px; font-weight: 900; text-align: right; }
+    .pending-row { grid-template-columns: 54px 1fr auto; }
+    .pending-row .btn { min-height: 36px; padding: 8px 10px; }
     .empty-state { color: var(--muted); text-align: center; padding: 26px 10px; font-size: 14px; }
-    .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
-    .metric { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fbfcfe; }
+    .metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 10px; }
+    .metric { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--panel-2); }
     .metric span { display: block; color: var(--muted); font-size: 12px; font-weight: 800; }
     .metric strong { display: block; margin-top: 4px; font-size: 20px; }
+    .inline-ticket {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255,255,255,.08);
+    }
+    .inline-ticket-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .inline-ticket-title {
+      margin: 0;
+      color: #F5F5F7;
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+    .ticket-actions.compact-actions {
+      grid-template-columns: 1fr 1fr;
+      margin-top: 10px;
+    }
+    .ticket-summary-line { color: var(--muted); font-size: 12px; font-weight: 800; }
+    .ticket-summary-line strong { color: var(--ink); font-size: 14px; margin: 0 2px; }
+    .activity-panel .panel-body,
+    .commission-panel .panel-body { padding: 12px; }
 
     .ticket-modal {
       display: none;
@@ -278,7 +363,8 @@
     }
     .ticket-sheet {
       width: min(420px, 100%);
-      background: white;
+      background: var(--panel);
+      border: 1px solid var(--line);
       border-radius: 8px;
       padding: 16px;
       box-shadow: var(--shadow);
@@ -287,28 +373,79 @@
       font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
       font-size: 13px;
       white-space: pre-wrap;
-      border: 1px dashed #b8c1ce;
+      border: 1px dashed #4A4A5A;
       border-radius: 8px;
       padding: 14px;
       margin-bottom: 12px;
-      background: #fafafa;
+      background: var(--panel-2);
     }
     .ticket-actions { display: grid; gap: 8px; }
+    .copy-icon {
+      display: inline-block;
+      width: 14px;
+      height: 16px;
+      margin-right: 7px;
+      border: 2px solid currentColor;
+      border-radius: 3px;
+      vertical-align: -2px;
+      position: relative;
+    }
+    .copy-icon::before {
+      content: "";
+      position: absolute;
+      width: 14px;
+      height: 16px;
+      border: 2px solid currentColor;
+      border-radius: 3px;
+      left: -6px;
+      top: 4px;
+      opacity: .55;
+    }
 
     @media (max-width: 980px) {
-      .workbench { width: min(100%, calc(100vw - 24px)); grid-template-columns: 1fr; padding: 12px 0 24px; }
+      .workbench { width: min(100%, calc(100vw - 24px)); grid-template-columns: 1fr; padding: 12px 0 24px; gap: 12px; }
       .topbar { padding: 12px; align-items: flex-start; }
       .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .sale-grid { grid-template-columns: 1fr; }
+      .sale-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .quick-amounts { grid-template-columns: repeat(2, 1fr); }
+      .desktop-keypad-panel { display: none; }
+      .mobile-keypad-panel { display: block; }
+      .mobile-keypad-panel .panel-body { padding: 12px; }
+      .mobile-keypad-panel .quick-amounts { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 8px; }
+      .mobile-keypad-panel .quick { min-height: 36px; font-size: 13px; }
+      .mobile-keypad-panel .key { min-height: 50px; font-size: 20px; }
+      .mobile-keypad-panel .key.action { font-size: 13px; }
+      .mobile-keypad-panel .key.submit { min-height: 54px; font-size: 18px; }
+      .ticket-list { max-height: 280px; }
+      .ticket-actions.compact-actions { grid-template-columns: 1fr; }
     }
     @media (max-width: 520px) {
       .topbar { flex-direction: column; }
       .seller { width: 100%; justify-content: space-between; }
-      .summary, .metrics { grid-template-columns: 1fr; }
+      .panel-head { align-items: flex-start; }
+      .panel-actions { flex-direction: column-reverse; align-items: flex-end; gap: 6px; }
+      .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+      .metrics { grid-template-columns: 1fr; }
+      .panel-body { padding: 12px; }
+      .sale-grid { grid-template-columns: 1fr; gap: 9px; }
+      .sale-grid .number-field, .sale-grid .money-field { min-height: 78px; padding: 10px; }
+      .field-label { margin-bottom: 6px; }
       .field-value { font-size: 26px; }
+      .client-box, .toggle-row { padding: 10px; }
+      .batch-box { padding: 10px; }
+      .batch-actions { grid-template-columns: 1fr; }
+      .summary { margin-top: 10px; }
+      .summary-box { padding: 10px; }
+      .summary-box strong { font-size: 15px; }
       .sale-row { grid-template-columns: 46px 1fr; }
+      .pending-row { grid-template-columns: 46px 1fr; }
+      .pending-row .btn { grid-column: 2; justify-self: start; }
       .sale-total { grid-column: 2; text-align: left; }
+    }
+    @media (max-width: 380px) {
+      .mobile-keypad-panel .quick { font-size: 12px; padding-inline: 4px; }
+      .mobile-keypad-panel .key { min-height: 46px; }
+      .summary-box { padding: 9px 7px; }
     }
   </style>
 </head>
@@ -355,7 +492,7 @@
           </div>
         </div>
 
-        <div class="panel" style="margin-top:16px;">
+        <div class="panel sale-panel">
           <div class="panel-head">
             <h2 class="panel-title">Nueva venta</h2>
             <span class="small-muted" id="cupo-info"></span>
@@ -369,6 +506,35 @@
               <div class="money-field" data-target="monto" onclick="setActiveField('monto')">
                 <div class="field-label">Monto numero</div>
                 <input id="monto" class="field-value" type="text" inputmode="numeric" placeholder="0" readonly />
+              </div>
+              <div class="mobile-keypad-panel full">
+                <div class="panel-head">
+                  <h2 class="panel-title">Teclado</h2>
+                  <span class="small-muted active-field-label">Numero</span>
+                </div>
+                <div class="panel-body">
+                  <div class="quick-amounts">
+                    <button class="quick" onclick="addQuickAmount(500)">500</button>
+                    <button class="quick" onclick="addQuickAmount(1000)">1.000</button>
+                    <button class="quick" onclick="addQuickAmount(2000)">2.000</button>
+                    <button class="quick" onclick="addQuickAmount(5000)">5.000</button>
+                  </div>
+                  <div class="keypad">
+                    <button class="key" onclick="pressDigit('1')">1</button>
+                    <button class="key" onclick="pressDigit('2')">2</button>
+                    <button class="key" onclick="pressDigit('3')">3</button>
+                    <button class="key" onclick="pressDigit('4')">4</button>
+                    <button class="key" onclick="pressDigit('5')">5</button>
+                    <button class="key" onclick="pressDigit('6')">6</button>
+                    <button class="key" onclick="pressDigit('7')">7</button>
+                    <button class="key" onclick="pressDigit('8')">8</button>
+                    <button class="key" onclick="pressDigit('9')">9</button>
+                    <button class="key action" onclick="clearActiveField()">Limpiar</button>
+                    <button class="key" onclick="pressDigit('0')">0</button>
+                    <button class="key action" onclick="backspaceActiveField()">Borrar</button>
+                    <button class="key submit" onclick="registrarVenta()">Agregar a tiquete</button>
+                  </div>
+                </div>
               </div>
               <div class="client-box full">
                 <div>
@@ -394,6 +560,16 @@
                 <div class="field-label">Monto reventado</div>
                 <input id="monto-reventado" class="field-value" type="text" inputmode="numeric" placeholder="0" readonly />
               </div>
+              <div class="batch-box full">
+                <div>
+                  <label>Lista recibida por WhatsApp</label>
+                  <textarea id="batch-numbers" placeholder="Pegue aqui: 45,12,08 / 451208 / 45 1000, 12 1000" oninput="previewListaNumeros()" onpaste="setTimeout(previewListaNumeros, 0)" onfocus="previewListaNumeros()"></textarea>
+                </div>
+                <div class="batch-actions">
+                  <div class="batch-preview" id="batch-preview">0 numeros detectados</div>
+                  <button class="btn gold small" id="batch-submit-btn" onclick="registrarListaNumeros()" type="button">Agregar lista</button>
+                </div>
+              </div>
             </div>
 
             <div class="summary">
@@ -401,15 +577,29 @@
               <div class="summary-box"><span class="small-muted">Reventado</span><strong id="summary-addon">0</strong></div>
               <div class="summary-box"><span class="small-muted">Total</span><strong id="summary-total">0</strong></div>
             </div>
+
+            <div class="inline-ticket">
+              <div class="inline-ticket-head">
+                <h2 class="inline-ticket-title">Tiquete en preparacion</h2>
+                <span class="ticket-summary-line"><strong id="ticket-items-count">0</strong> numeros · Total <strong id="ticket-items-total">0</strong></span>
+              </div>
+              <div id="ticket-items-list" class="sales-list ticket-list">
+                <div class="empty-state">No hay numeros cargados para el tiquete.</div>
+              </div>
+              <div class="ticket-actions compact-actions">
+                <button class="btn gold" id="generate-ticket-btn" onclick="generarTiquete()" type="button" disabled>Generar tiquete</button>
+                <button class="btn ghost" onclick="limpiarTiqueteEnPreparacion()" type="button">Limpiar tiquete</button>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <aside>
-        <div class="panel">
+      <aside class="side-rail">
+        <div class="panel desktop-keypad-panel">
           <div class="panel-head">
             <h2 class="panel-title">Teclado</h2>
-            <span class="small-muted" id="active-field-label">Numero</span>
+            <span class="small-muted active-field-label">Numero</span>
           </div>
           <div class="panel-body">
             <div class="quick-amounts">
@@ -431,15 +621,18 @@
               <button class="key action" onclick="clearActiveField()">Limpiar</button>
               <button class="key" onclick="pressDigit('0')">0</button>
               <button class="key action" onclick="backspaceActiveField()">Borrar</button>
-              <button class="key submit" onclick="registrarVenta()">Registrar venta</button>
+              <button class="key submit" onclick="registrarVenta()">Agregar a tiquete</button>
             </div>
           </div>
         </div>
 
-        <div class="panel" style="margin-top:16px;">
+        <div class="panel activity-panel">
           <div class="panel-head">
             <h2 class="panel-title">Ventas de hoy</h2>
-            <span class="small-muted" id="total">0</span>
+            <div class="panel-actions">
+              <button class="btn ghost small" onclick="limpiarPantallaVendedor()" type="button">Limpiar pantalla</button>
+              <span class="small-muted" id="total">0</span>
+            </div>
           </div>
           <div class="panel-body">
             <div class="metrics">
@@ -452,7 +645,7 @@
           </div>
         </div>
 
-        <div class="panel" style="margin-top:16px;">
+        <div class="panel commission-panel">
           <div class="panel-head">
             <h2 class="panel-title">Comisiones</h2>
             <span class="small-muted" id="commission-week-total">0</span>
@@ -471,6 +664,7 @@
     <div class="ticket-sheet">
       <div id="ticket-preview" class="ticket-preview"></div>
       <div class="ticket-actions">
+        <button class="btn ghost" onclick="copiarTicket()" type="button"><span class="copy-icon" aria-hidden="true"></span>Copiar tiquete</button>
         <button class="btn" onclick="imprimirBluetooth()">Imprimir Bluetooth</button>
         <button class="btn gold" onclick="compartirWhatsApp()">Compartir por WhatsApp</button>
         <button class="btn ghost" onclick="cerrarTicket()">Cerrar</button>
@@ -479,6 +673,6 @@
   </div>
 
   <script src="ui.js?v=1"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=22"></script>
 </body>
 </html>

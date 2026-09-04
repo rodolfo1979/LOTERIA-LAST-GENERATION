@@ -33,6 +33,7 @@ class DrawController extends Controller
                 'name' => $draw->name,
                 'game_type' => $draw->game_type,
                 'draw_datetime' => $draw->draw_datetime,
+                'draw_datetime_local' => $draw->draw_datetime_local,
                 'cutoff_minutes' => $draw->cutoff_minutes,
                 'status' => $draw->status,
                 'is_active' => $draw->is_active,
@@ -68,7 +69,7 @@ class DrawController extends Controller
             'loteria_id' => $loteria->id,
             'name' => $loteria->name,
             'game_type' => $loteria->game_type,
-            'draw_datetime' => $data['draw_datetime'],
+            'draw_datetime' => $this->localDrawDateTime($data['draw_datetime']),
             'cutoff_minutes' => $data['cutoff_minutes'] ?? 15,
             'status' => 'abierto',
             'is_active' => true,
@@ -110,7 +111,7 @@ class DrawController extends Controller
             'loteria_id' => $loteria->id,
             'name' => $loteria->name,
             'game_type' => $loteria->game_type,
-            'draw_datetime' => $data['draw_datetime'],
+            'draw_datetime' => $this->localDrawDateTime($data['draw_datetime']),
             'cutoff_minutes' => $data['cutoff_minutes'],
             'is_active' => (bool) $data['is_active'],
         ]);
@@ -142,6 +143,11 @@ class DrawController extends Controller
             'existing_count' => $result['existing']->count(),
             'without_schedule' => $result['without_schedule'],
         ]);
+    }
+
+    protected function localDrawDateTime(string $value): string
+    {
+        return Carbon::parse($value, config('app.timezone'))->format('Y-m-d H:i:s');
     }
 
     public function setActive(Request $request, Draw $draw)

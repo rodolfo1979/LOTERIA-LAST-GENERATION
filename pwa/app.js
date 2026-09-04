@@ -57,7 +57,7 @@ async function logout() {
   }
 
   clearSession();
-  window.location.href = '/?v=6';
+  window.location.href = '/vendedor';
 }
 
 async function parseJsonResponse(res) {
@@ -70,7 +70,7 @@ async function handleAuthFailure(res) {
   if (res.status !== 401 && res.status !== 419) return false;
   clearSession();
   alert('La sesion vencio. Inicia sesion de nuevo.');
-  window.location.href = '/?v=6';
+  window.location.href = '/vendedor';
   return true;
 }
 

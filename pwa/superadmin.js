@@ -16,14 +16,14 @@ function clearSuperadminSession() {
 
 function logoutSuperadmin() {
   clearSuperadminSession();
-  window.location.href = '/superadmin.html?v=3';
+  window.location.href = '/superadmin';
 }
 
 async function handleAuthFailure(res) {
   if (res.status !== 401 && res.status !== 419) return false;
   clearSuperadminSession();
   alert('La sesion de superadmin vencio. Inicia sesion de nuevo.');
-  window.location.href = '/superadmin.html?v=3';
+  window.location.href = '/superadmin';
   return true;
 }
 

@@ -40,14 +40,14 @@ function clearAdminSession() {
 
 function logoutAdmin() {
   clearAdminSession();
-  window.location.href = '/admin.html?v=9';
+  window.location.href = '/admin';
 }
 
 async function handleAuthFailure(res) {
   if (res.status !== 401 && res.status !== 419) return false;
   clearAdminSession();
   alert('La sesion de administrador vencio. Inicia sesion de nuevo.');
-  window.location.href = '/admin.html?v=9';
+  window.location.href = '/admin';
   return true;
 }
 

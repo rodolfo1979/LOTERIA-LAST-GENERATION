@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TenantRule;
+use App\Services\DefaultTenantRules;
 use Illuminate\Http\Request;
 
 class TenantRuleController extends Controller
@@ -10,6 +11,8 @@ class TenantRuleController extends Controller
     public function index(Request $request)
     {
         $this->assertIsAdmin($request);
+
+        app(DefaultTenantRules::class)->ensure($request->user()->tenant_id);
 
         return TenantRule::where('tenant_id', $request->user()->tenant_id)->get();
     }

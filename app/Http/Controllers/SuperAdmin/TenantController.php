@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Plan;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Services\DefaultTenantRules;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -50,6 +51,8 @@ class TenantController extends Controller
             'role' => 'admin',
             'pin_hash' => Hash::make($data['admin_pin']),
         ]);
+
+        app(DefaultTenantRules::class)->ensure($tenant->id);
 
         return response()->json([
             'tenant' => $tenant->load('plan'),

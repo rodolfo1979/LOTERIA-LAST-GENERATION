@@ -1393,9 +1393,13 @@ async function cargarReglas() {
   const list = document.getElementById('rules-list');
 
   const tipoSelect = document.getElementById('new-loteria-type');
-  if (tipoSelect) tipoSelect.innerHTML = reglas.map(r => `<option value="${r.game_type}">${r.game_type}</option>`).join('');
+  if (tipoSelect) {
+    tipoSelect.innerHTML = reglas.length
+      ? reglas.map(r => `<option value="${r.game_type}">${r.game_type}</option>`).join('')
+      : '<option value="">No hay reglas configuradas</option>';
+  }
 
-  list.innerHTML = reglas.map(r => {
+  list.innerHTML = reglas.length ? reglas.map(r => {
     if (r.partial_match_rules) {
       const pm = r.partial_match_rules;
       return `
@@ -1422,7 +1426,7 @@ async function cargarReglas() {
         </div>
         <button class="btn ghost" onclick="guardarRegla(${r.id})">Guardar ${r.game_type}</button>
       </div>`;
-  }).join('');
+  }).join('') : '<span class="sub">No hay reglas configuradas para este tenant. Actualiza la pantalla para generarlas automaticamente.</span>';
 }
 
 async function guardarRegla(id) {

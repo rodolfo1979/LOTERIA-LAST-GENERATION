@@ -92,7 +92,7 @@ class UserController extends Controller
         }
 
         $data = $request->validate([
-            'loteria_ids' => ['required', 'array'],
+            'loteria_ids' => ['present', 'array'],
             'loteria_ids.*' => ['integer', 'exists:loterias,id'],
         ]);
 

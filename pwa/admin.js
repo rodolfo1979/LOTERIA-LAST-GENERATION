@@ -107,9 +107,9 @@ function mostrarApp() {
   }
   cargarSorteos();
   cargarComisiones();
-  cargarVendedores();
   cargarReglas();
   cargarLoterias();
+  cargarVendedores();
   cargarClientes();
   startNumbersRealtime();
   startClientsRealtime();
@@ -781,6 +781,7 @@ async function cargarVendedoresDetalle() {
         <span class="sub">${v.phone}</span>
         <span class="pill ${v.active ? 'paid' : 'off'}">${v.active ? 'activo' : 'desactivado'}</span>
         <button class="inline-btn neutral" onclick="verLoteriasVendedor(${v.id}, '${jsArg(v.name)}')">Ver loterías</button>
+        <button class="inline-btn" onclick="editarLoteriasVendedor(${v.id}, '${jsArg(v.name)}')">Editar loterías</button>
         <button class="inline-btn" onclick="resetearPinVendedor(${v.id}, '${jsArg(v.name)}')">Reset PIN</button>
         <button class="inline-btn ${v.active ? 'danger' : 'neutral'}" onclick="cambiarEstadoVendedor(${v.id}, '${jsArg(v.name)}', ${v.active ? 'false' : 'true'})">${v.active ? 'Desactivar' : 'Reactivar'}</button>
       </div>
@@ -841,12 +842,59 @@ function verLoteriasVendedor(userId, name) {
   document.getElementById('seller-loterias-title').textContent = `LOTERÍAS DE ${name.toUpperCase()}`;
   panel.classList.add('active');
 
-  if (!vendedor || !vendedor.loterias?.length) {
-    list.innerHTML = '<span class="sub">Este vendedor no tiene loterías asignadas.</span>';
+  if (!vendedor) {
+    list.innerHTML = '<span class="sub">No se pudo encontrar el vendedor seleccionado.</span>';
     return;
   }
 
-  list.innerHTML = `<div class="assigned-list">${vendedor.loterias.map(loteria => {
+  if (!window.adminLoterias) {
+    list.innerHTML = '<span class="sub">Cargando loterías disponibles...</span>';
+    cargarLoterias().then(() => verLoteriasVendedor(userId, name));
+    return;
+  }
+
+  list.innerHTML = `
+    ${renderSellerLotteryEditor(vendedor, name)}
+    ${renderSellerAssignedLotteries(vendedor, userId, name)}
+  `;
+}
+
+function editarLoteriasVendedor(userId, name) {
+  verLoteriasVendedor(userId, name);
+  document.getElementById(`seller-loteria-check-${userId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function renderSellerLotteryEditor(vendedor, name) {
+  const assigned = new Set((vendedor.loterias || []).map(l => Number(l.id)));
+  const loterias = window.adminLoterias || [];
+
+  return `
+    <div class="seller-number-section" id="seller-loteria-check-${vendedor.id}">
+      <div class="seller-number-head">
+        <div>
+          <div class="seller-number-title">Asignación de loterías</div>
+          <div class="seller-number-meta">Marca las loterías que ${name} puede vender. El historial se conserva aunque se quite una lotería.</div>
+        </div>
+      </div>
+      <div class="checklist">
+        ${loterias.length ? loterias.map(l => `
+          <label>
+            <input type="checkbox" class="seller-edit-loteria" value="${l.id}" ${assigned.has(Number(l.id)) ? 'checked' : ''} />
+            ${l.name} <span class="sub">(${l.game_type})</span>
+          </label>
+        `).join('') : '<span class="sub">Primero crea una lotería.</span>'}
+      </div>
+      <button class="btn ghost" style="margin-top:12px;" onclick="guardarLoteriasVendedor(${vendedor.id}, '${jsArg(name)}')">Guardar loterías asignadas</button>
+    </div>
+  `;
+}
+
+function renderSellerAssignedLotteries(vendedor, userId, name) {
+  if (!vendedor.loterias?.length) {
+    return '<div class="seller-number-section"><span class="sub">Este vendedor no tiene loterías asignadas.</span></div>';
+  }
+
+  return `<div class="seller-number-section"><div class="assigned-list">${vendedor.loterias.map(loteria => {
     const draw = findLatestDrawForLoteria(loteria.id);
     const drawLabel = draw
       ? formatDrawDateTime(draw.draw_datetime)
@@ -868,7 +916,32 @@ function verLoteriasVendedor(userId, name) {
         </div>
       </div>
     `;
-  }).join('')}</div>`;
+  }).join('')}</div></div>`;
+}
+
+async function guardarLoteriasVendedor(userId, name) {
+  const checks = Array.from(document.querySelectorAll('#seller-loterias-panel .seller-edit-loteria:checked'));
+  const loteria_ids = checks.map(el => el.value);
+
+  const confirmar = await showAppConfirm(
+    `Actualizar loterías asignadas a ${name}?`,
+    'Guardar asignación'
+  );
+  if (!confirmar) return;
+
+  const res = await fetch(`${API}/users/${userId}/loterias`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ loteria_ids }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudieron guardar las loterías del vendedor'); return; }
+
+  alert(`Loterías actualizadas para ${name}.`);
+  await cargarVendedoresDetalle();
+  cargarVendedores();
+  verLoteriasVendedor(userId, name);
 }
 
 async function verListaVendedor(userId, loteriaId, drawId, sellerName, loteriaName) {

@@ -15,6 +15,8 @@ Route::post('/login', [AuthController::class, 'login'])
 Route::middleware('auth:sanctum')->prefix('superadmin')->group(function () {
     Route::get('/plans', [\App\Http\Controllers\SuperAdmin\PlanController::class, 'index']);
     Route::post('/plans', [\App\Http\Controllers\SuperAdmin\PlanController::class, 'store']);
+    Route::put('/plans/{plan}', [\App\Http\Controllers\SuperAdmin\PlanController::class, 'update']);
+    Route::patch('/plans/{plan}/active', [\App\Http\Controllers\SuperAdmin\PlanController::class, 'setActive']);
 
     Route::get('/tenants', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'index']);
     Route::post('/tenants', [\App\Http\Controllers\SuperAdmin\TenantController::class, 'store']);

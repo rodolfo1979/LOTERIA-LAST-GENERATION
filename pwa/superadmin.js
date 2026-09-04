@@ -95,6 +95,14 @@ function jsArg(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+function money(value) {
+  return `₡${Number(value || 0).toLocaleString('es-CR')}`;
+}
+
+function nullableNumberValue(value) {
+  return value === null || value === undefined || value === '' ? '' : Number(value);
+}
+
 async function resetearPinTenantAdmin(tenantId, userId, name) {
   const pin = prompt(`Nuevo PIN de 4 digitos para ${name}`);
   if (pin === null) return;
@@ -158,17 +166,47 @@ async function cargarPlanes() {
   const planes = await res.json();
 
   const list = document.getElementById('planes-list');
-  list.innerHTML = planes.length ? planes.map(p => `
-    <div class="row">
-      <div>
-        <div class="name">${p.name}</div>
-        <div class="sub">₡${Number(p.price_monthly).toLocaleString('es-CR')}/mes · hasta ${p.max_vendedores ?? '∞'} vendedores</div>
-      </div>
-      <span class="sub">${p.tenants_count} tenant(s)</span>
-    </div>
-  `).join('') : '<span class="sub">No hay paquetes creados todavía.</span>';
+  const activePlans = planes.filter(p => p.active !== false);
+  const tenantsTotal = planes.reduce((total, p) => total + Number(p.tenants_count || 0), 0);
+  const averagePrice = activePlans.length
+    ? activePlans.reduce((total, p) => total + Number(p.price_monthly || 0), 0) / activePlans.length
+    : 0;
 
-  document.getElementById('new-tenant-plan').innerHTML = planes.map(p => `<option value="${p.id}">${p.name} (₡${Number(p.price_monthly).toLocaleString('es-CR')}/mes)</option>`).join('');
+  document.getElementById('plans-active-count').textContent = activePlans.length;
+  document.getElementById('plans-tenant-count').textContent = tenantsTotal;
+  document.getElementById('plans-average-price').textContent = money(averagePrice);
+
+  list.innerHTML = planes.length ? `<div class="plan-grid">${planes.map(p => `
+    <div class="plan-card ${p.active === false ? 'inactivo' : ''}">
+      <div class="plan-head">
+        <div>
+          <div class="plan-name">${p.name}</div>
+          <div class="plan-price">${money(p.price_monthly)}<span class="sub"> / mes</span></div>
+        </div>
+        <span class="pill ${p.active === false ? 'suspendido' : 'activo'}">${p.active === false ? 'inactivo' : 'activo'}</span>
+      </div>
+      <div class="plan-limits">
+        <span>${p.max_vendedores ?? '∞'} vendedores</span>
+        <span>${p.max_loterias ?? '∞'} loterías</span>
+        <span>${p.tenants_count || 0} tenant(s)</span>
+      </div>
+      <div class="form-grid" style="grid-template-columns:1.2fr .8fr .8fr .8fr;margin-bottom:10px;">
+        <input id="plan-name-${p.id}" type="text" value="${p.name}" aria-label="Nombre del plan" />
+        <input id="plan-price-${p.id}" type="number" min="0" value="${Number(p.price_monthly || 0)}" aria-label="Precio mensual" />
+        <input id="plan-sellers-${p.id}" type="number" min="1" value="${nullableNumberValue(p.max_vendedores)}" placeholder="∞" aria-label="Máximo vendedores" />
+        <input id="plan-loterias-${p.id}" type="number" min="1" value="${nullableNumberValue(p.max_loterias)}" placeholder="∞" aria-label="Máximo loterías" />
+      </div>
+      <div class="plan-actions">
+        <button class="btn small" onclick="actualizarPlan(${p.id})">Guardar cambios</button>
+        <button class="btn small ghost" onclick="cambiarEstadoPlan(${p.id}, ${p.active === false ? 'true' : 'false'}, '${jsArg(p.name)}')">${p.active === false ? 'Activar' : 'Desactivar'}</button>
+      </div>
+    </div>
+  `).join('')}</div>` : '<div class="empty-state">No hay planes creados. Crea tu primer plan personalizado abajo.</div>';
+
+  const tenantPlanSelect = document.getElementById('new-tenant-plan');
+  tenantPlanSelect.innerHTML = activePlans.length
+    ? activePlans.map(p => `<option value="${p.id}">${p.name} (${money(p.price_monthly)}/mes)</option>`).join('')
+    : '<option value="">Crea un plan activo primero</option>';
 }
 
 async function crearPlan() {
@@ -195,6 +233,51 @@ async function crearPlan() {
   document.getElementById('new-plan-price').value = '';
   document.getElementById('new-plan-max-vendedores').value = '';
   document.getElementById('new-plan-max-loterias').value = '';
+  cargarPlanes();
+}
+
+async function actualizarPlan(planId) {
+  const body = {
+    name: document.getElementById(`plan-name-${planId}`).value.trim(),
+    price_monthly: document.getElementById(`plan-price-${planId}`).value,
+    max_vendedores: document.getElementById(`plan-sellers-${planId}`).value || null,
+    max_loterias: document.getElementById(`plan-loterias-${planId}`).value || null,
+  };
+
+  if (!body.name || body.price_monthly === '') {
+    alert('El plan necesita nombre y precio.');
+    return;
+  }
+
+  const res = await fetch(`${API}/superadmin/plans/${planId}`, {
+    method: 'PUT',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo actualizar el plan'); return; }
+
+  alert('Plan actualizado.');
+  cargarPlanes();
+}
+
+async function cambiarEstadoPlan(planId, active, name) {
+  const accion = active ? 'activar' : 'desactivar';
+  const confirmar = window.showAppConfirm
+    ? await showAppConfirm(`Quieres ${accion} el plan ${name}?`, `${active ? 'Activar' : 'Desactivar'} plan`)
+    : window.confirm(`Quieres ${accion} el plan ${name}?`);
+  if (!confirmar) return;
+
+  const res = await fetch(`${API}/superadmin/plans/${planId}/active`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ active }),
+  });
+  if (await handleAuthFailure(res)) return;
+  const data = await readError(res);
+  if (!res.ok) { alert(data.message || 'No se pudo cambiar el estado del plan'); return; }
+
   cargarPlanes();
 }
 

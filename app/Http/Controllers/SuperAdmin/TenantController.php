@@ -8,6 +8,7 @@ use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class TenantController extends Controller
 {
@@ -28,7 +29,7 @@ class TenantController extends Controller
 
         $data = $request->validate([
             'name' => ['required', 'string', 'max:150'],
-            'plan_id' => ['required', 'exists:plans,id'],
+            'plan_id' => ['required', Rule::exists('plans', 'id')->where('active', true)],
             'subscription_ends_at' => ['nullable', 'date'],
             'admin_name' => ['required', 'string', 'max:100'],
             'admin_phone' => ['required', 'string', 'unique:users,phone'],
@@ -62,7 +63,7 @@ class TenantController extends Controller
         $this->assertSuperAdmin($request);
 
         $data = $request->validate([
-            'plan_id' => ['sometimes', 'exists:plans,id'],
+            'plan_id' => ['sometimes', Rule::exists('plans', 'id')->where('active', true)],
             'status' => ['sometimes', 'in:activo,suspendido,prueba'],
             'subscription_ends_at' => ['sometimes', 'nullable', 'date'],
         ]);

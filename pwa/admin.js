@@ -132,7 +132,7 @@ async function cargarSorteos() {
   const res = await fetch(`${API}/draws`, { headers: authHeaders() });
   if (await handleAuthFailure(res)) return;
   if (!res.ok) return;
-  const draws = await res.json();
+  const draws = (await res.json()).map(normalizeDrawDateTime);
   adminDraws = draws;
   const abiertos = draws.filter(d => d.status === 'abierto' && d.is_active);
 
@@ -208,6 +208,13 @@ function drawDateParts(value) {
     day: match[3],
     hour: match[4],
     minute: match[5],
+  };
+}
+
+function normalizeDrawDateTime(draw) {
+  return {
+    ...draw,
+    draw_datetime: draw.draw_datetime_local || draw.draw_datetime,
   };
 }
 

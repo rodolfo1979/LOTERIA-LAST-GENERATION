@@ -155,7 +155,7 @@ async function cargarSorteos() {
     headers: authHeaders(),
   });
   if (await handleAuthFailure(res)) return;
-  const draws = await res.json();
+  const draws = (await res.json()).map(normalizeDrawDateTime);
 
   const list = document.getElementById('draws-list');
   document.getElementById('draw-count').textContent = `${draws.length} vendibles`;
@@ -188,6 +188,13 @@ function seleccionarSorteo(id, nombre, hora = '') {
   localStorage.setItem('draw_hora', hora || '');
   cargarSorteos();
   updateDrawLabel();
+}
+
+function normalizeDrawDateTime(draw) {
+  return {
+    ...draw,
+    draw_datetime: draw.draw_datetime_local || draw.draw_datetime,
+  };
 }
 
 function updateDrawLabel() {

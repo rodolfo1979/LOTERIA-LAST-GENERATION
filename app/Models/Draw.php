@@ -17,6 +17,15 @@ class Draw extends Model
         'is_active' => 'boolean',
     ];
 
+    protected $appends = ['draw_datetime_local'];
+
+    public function getDrawDatetimeLocalAttribute(): ?string
+    {
+        $rawValue = $this->getRawOriginal('draw_datetime');
+
+        return $rawValue ? Carbon::parse($rawValue)->format('Y-m-d H:i:s') : null;
+    }
+
     public function loteria()
     {
         return $this->belongsTo(Loteria::class);
